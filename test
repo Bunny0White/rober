@@ -1,82 +1,122 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 
-local localPlayer = Players.LocalPlayer
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Etats des fonctions
 local espEnabled = false
+local speedEnabled = false
+
 local highlights = {}
 
--- Créer le highlight
+-- ================= UI =================
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AdminPanel"
+screenGui.Parent = playerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 250, 0, 200)
+frame.Position = UDim2.new(0, 20, 0, 100)
+frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+frame.Visible = true
+frame.Parent = screenGui
+
+local function createButton(text, posY)
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.new(1, -20, 0, 40)
+	button.Position = UDim2.new(0, 10, 0, posY)
+	button.BackgroundColor3 = Color3.fromRGB(50,50,50)
+	button.TextColor3 = Color3.new(1,1,1)
+	button.Text = text
+	button.Parent = frame
+	return button
+end
+
+local espButton = createButton("ESP : OFF", 20)
+local speedButton = createButton("Speed : OFF", 70)
+
+-- ================= ESP =================
+
 local function createHighlight(character)
 	if not character then return end
 	
-	-- Supprime ancien highlight si existant
-	if character:FindFirstChild("ESP_Highlight") then
-		character.ESP_Highlight:Destroy()
-	end
+	local h = Instance.new("Highlight")
+	h.Name = "ESP_Highlight"
+	h.FillColor = Color3.fromRGB(255,0,0)
+	h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	h.Parent = character
 	
-	local highlight = Instance.new("Highlight")
-	highlight.Name = "ESP_Highlight"
-	highlight.FillColor = Color3.fromRGB(255, 0, 0)
-	highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-	highlight.FillTransparency = 0.5
-	highlight.OutlineTransparency = 0
-	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-	highlight.Parent = character
-	
-	return highlight
+	return h
 end
 
--- Appliquer ESP à un joueur
-local function setupPlayer(player)
-	if player == localPlayer then return end
-	
-	local function applyESP(character)
-		if espEnabled then
-			highlights[player] = createHighlight(character)
+local function updateESP()
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			
+			local old = p.Character:FindFirstChild("ESP_Highlight")
+			if old then old:Destroy() end
+			
+			if espEnabled then
+				createHighlight(p.Character)
+			end
 		end
 	end
-	
-	-- Si déjà spawn
-	if player.Character then
-		applyESP(player.Character)
+end
+
+-- ================= SPEED =================
+
+local function updateSpeed()
+	if player.Character and player.Character:FindFirstChild("Humanoid") then
+		local hum = player.Character.Humanoid
+		
+		if speedEnabled then
+			hum.WalkSpeed = 32
+		else
+			hum.WalkSpeed = 16
+		end
 	end
-	
-	-- Quand respawn
-	player.CharacterAdded:Connect(function(character)
-		task.wait(1) -- attendre chargement complet
-		applyESP(character)
-	end)
 end
 
--- Initialisation
-for _, player in ipairs(Players:GetPlayers()) do
-	setupPlayer(player)
-end
+-- ================= BOUTONS =================
 
-Players.PlayerAdded:Connect(setupPlayer)
+espButton.MouseButton1Click:Connect(function()
+	espEnabled = not espEnabled
+	espButton.Text = "ESP : " .. (espEnabled and "ON" or "OFF")
+	updateESP()
+end)
 
--- Toggle avec V
+speedButton.MouseButton1Click:Connect(function()
+	speedEnabled = not speedEnabled
+	speedButton.Text = "Speed : " .. (speedEnabled and "ON" or "OFF")
+	updateSpeed()
+end)
+
+-- ================= TOUCHE V =================
+
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
 	
 	if input.KeyCode == Enum.KeyCode.V then
-		espEnabled = not espEnabled
-		
-		for _, player in ipairs(Players:GetPlayers()) do
-			if player ~= localPlayer and player.Character then
-				
-				-- Supprimer
-				if player.Character:FindFirstChild("ESP_Highlight") then
-					player.Character.ESP_Highlight:Destroy()
-				end
-				
-				-- Recréer si activé
-				if espEnabled then
-					createHighlight(player.Character)
-				end
-			end
-		end
-		
-		print("ESP :", espEnabled and "ON" or "OFF")
+		frame.Visible = not frame.Visible
 	end
+end)
+
+-- ================= RESPAWN =================
+
+player.CharacterAdded:Connect(function()
+	task.wait(1)
+	updateSpeed()
+	updateESP()
+end)
+
+-- Nouveaux joueurs
+Players.PlayerAdded:Connect(function(p)
+	p.CharacterAdded:Connect(function()
+		task.wait(1)
+		if espEnabled then
+			updateESP()
+		end
+	end)
 end)

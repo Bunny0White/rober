@@ -1,122 +1,636 @@
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
+-- ============================================================
+--  ADMIN PANEL - LocalScript (StarterPlayerScripts)
+--  Fonctionnalités : ESP, Speed, JumpBoost, Fly, GodMode,
+--                    InfiniteJump, Nametags
+--  Touche V : afficher / cacher le panel
+-- ============================================================
 
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local Players            = game:GetService("Players")
+local UserInputService   = game:GetService("UserInputService")
+local RunService         = game:GetService("RunService")
+local TweenService       = game:GetService("TweenService")
 
--- Etats des fonctions
-local espEnabled = false
-local speedEnabled = false
+local player     = Players.LocalPlayer
+local playerGui  = player:WaitForChild("PlayerGui")
 
-local highlights = {}
+-- ============================================================
+--  ÉTATS
+-- ============================================================
+local states = {
+    esp          = false,
+    speed        = false,
+    jumpBoost    = false,
+    fly          = false,
+    godMode      = false,
+    infiniteJump = false,
+    nametags     = false,
+}
 
--- ================= UI =================
+-- ============================================================
+--  CONNEXIONS / RÉFÉRENCES (pour nettoyage)
+-- ============================================================
+local flyConn        = nil
+local godConn        = nil
+local infiniteConn   = nil
+local nametags       = {}   -- { player = BillboardGui }
+local flyBodyVel     = nil
+local flyBodyGyro    = nil
 
+-- ============================================================
+--  CONSTANTES
+-- ============================================================
+local SPEED_ON      = 32
+local SPEED_DEFAULT = 16
+local JUMP_ON       = 75
+local JUMP_DEFAULT  = 50
+local FLY_SPEED     = 50
+
+-- ============================================================
+--  UTILITAIRES
+-- ============================================================
+local function getHumanoid()
+    local char = player.Character
+    return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function getRootPart()
+    local char = player.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function log(msg)
+    print("[AdminPanel] " .. msg)
+end
+
+-- ============================================================
+--  UI — CRÉATION
+-- ============================================================
+
+-- ScreenGui
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "AdminPanel"
-screenGui.Parent = playerGui
+screenGui.Name            = "AdminPanel"
+screenGui.ResetOnSpawn    = false
+screenGui.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
+screenGui.Parent          = playerGui
 
+-- Bouton toggle (icône hamburger)
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Name              = "ToggleBtn"
+toggleBtn.Size              = UDim2.new(0, 42, 0, 42)
+toggleBtn.Position          = UDim2.new(0, 14, 0, 14)
+toggleBtn.BackgroundColor3  = Color3.fromRGB(20, 20, 28)
+toggleBtn.TextColor3        = Color3.fromRGB(180, 140, 255)
+toggleBtn.Text              = "⚙"
+toggleBtn.Font              = Enum.Font.GothamBold
+toggleBtn.TextSize          = 20
+toggleBtn.ZIndex            = 10
+toggleBtn.Parent            = screenGui
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 10)
+Instance.new("UIStroke", toggleBtn).Color = Color3.fromRGB(100, 70, 180)
+
+-- Frame principal
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 250, 0, 200)
-frame.Position = UDim2.new(0, 20, 0, 100)
-frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
-frame.Visible = true
-frame.Parent = screenGui
+frame.Name              = "MainFrame"
+frame.Size              = UDim2.new(0, 270, 0, 420)
+frame.Position          = UDim2.new(0, 14, 0, 64)
+frame.BackgroundColor3  = Color3.fromRGB(14, 14, 20)
+frame.BorderSizePixel   = 0
+frame.ClipsDescendants  = true
+frame.Visible           = true
+frame.Parent            = screenGui
 
-local function createButton(text, posY)
-	local button = Instance.new("TextButton")
-	button.Size = UDim2.new(1, -20, 0, 40)
-	button.Position = UDim2.new(0, 10, 0, posY)
-	button.BackgroundColor3 = Color3.fromRGB(50,50,50)
-	button.TextColor3 = Color3.new(1,1,1)
-	button.Text = text
-	button.Parent = frame
-	return button
+local frameCorner = Instance.new("UICorner", frame)
+frameCorner.CornerRadius = UDim.new(0, 14)
+
+local frameStroke = Instance.new("UIStroke", frame)
+frameStroke.Color     = Color3.fromRGB(90, 60, 160)
+frameStroke.Thickness = 1.5
+
+-- Dégradé de fond
+local gradient = Instance.new("UIGradient", frame)
+gradient.Color    = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 16, 32)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 10, 16)),
+})
+gradient.Rotation = 135
+
+-- Barre de titre (drag handle)
+local titleBar = Instance.new("Frame")
+titleBar.Name              = "TitleBar"
+titleBar.Size              = UDim2.new(1, 0, 0, 44)
+titleBar.BackgroundColor3  = Color3.fromRGB(28, 20, 46)
+titleBar.BorderSizePixel   = 0
+titleBar.ZIndex            = 2
+titleBar.Parent            = frame
+Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 14)
+
+-- Sous-ligne titre (cacher arrondi bas de la titlebar)
+local titleBarFill = Instance.new("Frame")
+titleBarFill.Size              = UDim2.new(1, 0, 0, 14)
+titleBarFill.Position          = UDim2.new(0, 0, 1, -14)
+titleBarFill.BackgroundColor3  = Color3.fromRGB(28, 20, 46)
+titleBarFill.BorderSizePixel   = 0
+titleBarFill.ZIndex            = 2
+titleBarFill.Parent            = titleBar
+
+-- Titre
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size              = UDim2.new(1, -50, 1, 0)
+titleLabel.Position          = UDim2.new(0, 14, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text              = "✦  Admin Panel"
+titleLabel.Font              = Enum.Font.GothamBold
+titleLabel.TextSize          = 16
+titleLabel.TextColor3        = Color3.fromRGB(210, 180, 255)
+titleLabel.TextXAlignment    = Enum.TextXAlignment.Left
+titleLabel.ZIndex            = 3
+titleLabel.Parent            = titleBar
+
+-- Bouton fermer dans le panel
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size              = UDim2.new(0, 26, 0, 26)
+closeBtn.Position          = UDim2.new(1, -36, 0.5, -13)
+closeBtn.BackgroundColor3  = Color3.fromRGB(180, 50, 80)
+closeBtn.Text              = "✕"
+closeBtn.Font              = Enum.Font.GothamBold
+closeBtn.TextSize          = 13
+closeBtn.TextColor3        = Color3.new(1, 1, 1)
+closeBtn.ZIndex            = 4
+closeBtn.Parent            = titleBar
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 7)
+
+-- Conteneur des boutons (scrollable)
+local scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Name                   = "ScrollFrame"
+scrollFrame.Size                   = UDim2.new(1, 0, 1, -44)
+scrollFrame.Position               = UDim2.new(0, 0, 0, 44)
+scrollFrame.BackgroundTransparency = 1
+scrollFrame.BorderSizePixel        = 0
+scrollFrame.ScrollBarThickness     = 3
+scrollFrame.ScrollBarImageColor3   = Color3.fromRGB(120, 80, 200)
+scrollFrame.CanvasSize             = UDim2.new(0, 0, 0, 0)
+scrollFrame.AutomaticCanvasSize    = Enum.AutomaticSize.Y
+scrollFrame.Parent                 = frame
+
+local listLayout = Instance.new("UIListLayout", scrollFrame)
+listLayout.Padding          = UDim.new(0, 8)
+listLayout.SortOrder        = Enum.SortOrder.LayoutOrder
+listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local listPad = Instance.new("UIPadding", scrollFrame)
+listPad.PaddingTop    = UDim.new(0, 10)
+listPad.PaddingBottom = UDim.new(0, 10)
+listPad.PaddingLeft   = UDim.new(0, 12)
+listPad.PaddingRight  = UDim.new(0, 12)
+
+-- ============================================================
+--  FACTORY — créer un bouton toggle
+-- ============================================================
+local COLOR_OFF = Color3.fromRGB(30, 26, 44)
+local COLOR_ON  = Color3.fromRGB(60, 30, 100)
+local ACCENT    = Color3.fromRGB(160, 100, 255)
+local ACCENT_ON = Color3.fromRGB(200, 150, 255)
+
+local function createToggleButton(labelText, icon, order)
+    local btn = Instance.new("TextButton")
+    btn.Name              = labelText
+    btn.Size              = UDim2.new(1, 0, 0, 46)
+    btn.BackgroundColor3  = COLOR_OFF
+    btn.BorderSizePixel   = 0
+    btn.Text              = ""
+    btn.LayoutOrder       = order
+    btn.AutoButtonColor   = false
+    btn.Parent            = scrollFrame
+
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+
+    local stroke = Instance.new("UIStroke", btn)
+    stroke.Color     = Color3.fromRGB(60, 45, 90)
+    stroke.Thickness = 1
+
+    -- Icône
+    local iconLbl = Instance.new("TextLabel")
+    iconLbl.Size              = UDim2.new(0, 30, 1, 0)
+    iconLbl.Position          = UDim2.new(0, 10, 0, 0)
+    iconLbl.BackgroundTransparency = 1
+    iconLbl.Text              = icon
+    iconLbl.TextSize          = 18
+    iconLbl.Font              = Enum.Font.GothamBold
+    iconLbl.TextColor3        = ACCENT
+    iconLbl.ZIndex            = 2
+    iconLbl.Parent            = btn
+
+    -- Label
+    local nameLbl = Instance.new("TextLabel")
+    nameLbl.Size              = UDim2.new(1, -80, 1, 0)
+    nameLbl.Position          = UDim2.new(0, 46, 0, 0)
+    nameLbl.BackgroundTransparency = 1
+    nameLbl.Text              = labelText
+    nameLbl.Font              = Enum.Font.Gotham
+    nameLbl.TextSize          = 14
+    nameLbl.TextColor3        = Color3.fromRGB(200, 190, 220)
+    nameLbl.TextXAlignment    = Enum.TextXAlignment.Left
+    nameLbl.ZIndex            = 2
+    nameLbl.Parent            = btn
+
+    -- Pastille ON/OFF
+    local badge = Instance.new("TextLabel")
+    badge.Size              = UDim2.new(0, 44, 0, 22)
+    badge.Position          = UDim2.new(1, -52, 0.5, -11)
+    badge.BackgroundColor3  = Color3.fromRGB(50, 40, 70)
+    badge.Text              = "OFF"
+    badge.Font              = Enum.Font.GothamBold
+    badge.TextSize          = 11
+    badge.TextColor3        = Color3.fromRGB(150, 130, 180)
+    badge.ZIndex            = 2
+    badge.Parent            = btn
+    Instance.new("UICorner", badge).CornerRadius = UDim.new(0, 6)
+
+    -- Hover
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Color3.fromRGB(40, 34, 58)
+        }):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15), {
+            BackgroundColor3 = states[labelText] and COLOR_ON or COLOR_OFF
+        }):Play()
+    end)
+
+    -- Méthode pour mettre à jour l'état visuel
+    local function setVisual(on)
+        TweenService:Create(btn, TweenInfo.new(0.2), {
+            BackgroundColor3 = on and COLOR_ON or COLOR_OFF
+        }):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {
+            Color = on and ACCENT or Color3.fromRGB(60, 45, 90)
+        }):Play()
+        badge.Text              = on and "ON" or "OFF"
+        badge.TextColor3        = on and ACCENT_ON or Color3.fromRGB(150, 130, 180)
+        badge.BackgroundColor3  = on and Color3.fromRGB(60, 30, 100) or Color3.fromRGB(50, 40, 70)
+        iconLbl.TextColor3      = on and ACCENT_ON or ACCENT
+    end
+
+    return btn, setVisual
 end
 
-local espButton = createButton("ESP : OFF", 20)
-local speedButton = createButton("Speed : OFF", 70)
+-- ============================================================
+--  CRÉATION DES BOUTONS
+-- ============================================================
+local espBtn,      espSet      = createToggleButton("ESP",           "👁",  1)
+local speedBtn,    speedSet    = createToggleButton("Speed",         "⚡",  2)
+local jumpBtn,     jumpSet     = createToggleButton("JumpBoost",     "🦘",  3)
+local flyBtn,      flySet      = createToggleButton("Fly",           "🛸",  4)
+local godBtn,      godSet      = createToggleButton("GodMode",       "🛡",  5)
+local infJumpBtn,  infJumpSet  = createToggleButton("InfiniteJump",  "∞",   6)
+local nametagsBtn, nametagsSet = createToggleButton("Nametags",      "🏷",  7)
 
--- ================= ESP =================
+-- ============================================================
+--  DRAG — rendre le panel déplaçable
+-- ============================================================
+do
+    local dragging, dragStart, startPos = false, nil, nil
 
-local function createHighlight(character)
-	if not character then return end
-	
-	local h = Instance.new("Highlight")
-	h.Name = "ESP_Highlight"
-	h.FillColor = Color3.fromRGB(255,0,0)
-	h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-	h.Parent = character
-	
-	return h
+    titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or
+           input.UserInputType == Enum.UserInputType.Touch then
+            dragging  = true
+            dragStart = input.Position
+            startPos  = frame.Position
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or
+                         input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or
+           input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
 end
 
-local function updateESP()
-	for _, p in ipairs(Players:GetPlayers()) do
-		if p ~= player and p.Character then
-			
-			local old = p.Character:FindFirstChild("ESP_Highlight")
-			if old then old:Destroy() end
-			
-			if espEnabled then
-				createHighlight(p.Character)
-			end
-		end
-	end
+-- ============================================================
+--  TOGGLE PANEL (bouton & touche V)
+-- ============================================================
+local function togglePanel()
+    local visible = not frame.Visible
+    if visible then
+        frame.Visible = true
+        frame.Size = UDim2.new(0, 0, 0, 0)
+        TweenService:Create(frame, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 270, 0, 420)
+        }):Play()
+    else
+        local t = TweenService:Create(frame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            Size = UDim2.new(0, 0, 0, 0)
+        })
+        t:Play()
+        t.Completed:Connect(function() frame.Visible = false end)
+    end
 end
 
--- ================= SPEED =================
+toggleBtn.MouseButton1Click:Connect(togglePanel)
+closeBtn.MouseButton1Click:Connect(togglePanel)
 
-local function updateSpeed()
-	if player.Character and player.Character:FindFirstChild("Humanoid") then
-		local hum = player.Character.Humanoid
-		
-		if speedEnabled then
-			hum.WalkSpeed = 32
-		else
-			hum.WalkSpeed = 16
-		end
-	end
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.V then
+        togglePanel()
+    end
+end)
+
+-- ============================================================
+--  FONCTIONNALITÉ 1 — ESP (Highlight)
+-- ============================================================
+local function removeAllHighlights()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character then
+            local h = p.Character:FindFirstChild("ESP_Highlight")
+            if h then h:Destroy() end
+        end
+    end
 end
 
--- ================= BOUTONS =================
+local function addHighlight(character)
+    if not character then return end
+    if character:FindFirstChild("ESP_Highlight") then return end
+    local h = Instance.new("Highlight")
+    h.Name          = "ESP_Highlight"
+    h.FillColor     = Color3.fromRGB(140, 60, 255)
+    h.OutlineColor  = Color3.fromRGB(220, 170, 255)
+    h.FillTransparency    = 0.4
+    h.OutlineTransparency = 0
+    h.DepthMode    = Enum.HighlightDepthMode.AlwaysOnTop
+    h.Parent       = character
+end
 
-espButton.MouseButton1Click:Connect(function()
-	espEnabled = not espEnabled
-	espButton.Text = "ESP : " .. (espEnabled and "ON" or "OFF")
-	updateESP()
-end)
+local function refreshESP()
+    if states.ESP then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= player then
+                if p.Character then addHighlight(p.Character) end
+                p.CharacterAdded:Connect(function(char)
+                    task.wait(0.5)
+                    if states.ESP then addHighlight(char) end
+                end)
+            end
+        end
+    else
+        removeAllHighlights()
+    end
+end
 
-speedButton.MouseButton1Click:Connect(function()
-	speedEnabled = not speedEnabled
-	speedButton.Text = "Speed : " .. (speedEnabled and "ON" or "OFF")
-	updateSpeed()
-end)
+-- ============================================================
+--  FONCTIONNALITÉ 2 — SPEED
+-- ============================================================
+local function applySpeed()
+    local hum = getHumanoid()
+    if hum then
+        hum.WalkSpeed = states.Speed and SPEED_ON or SPEED_DEFAULT
+    end
+end
 
--- ================= TOUCHE V =================
+-- ============================================================
+--  FONCTIONNALITÉ 3 — JUMP BOOST
+-- ============================================================
+local function applyJump()
+    local hum = getHumanoid()
+    if hum then
+        hum.JumpPower = states.JumpBoost and JUMP_ON or JUMP_DEFAULT
+    end
+end
 
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
-	
-	if input.KeyCode == Enum.KeyCode.V then
-		frame.Visible = not frame.Visible
-	end
-end)
+-- ============================================================
+--  FONCTIONNALITÉ 4 — FLY
+-- ============================================================
+local function startFly()
+    local root = getRootPart()
+    local hum  = getHumanoid()
+    if not root or not hum then return end
 
--- ================= RESPAWN =================
+    hum.PlatformStand = true
 
-player.CharacterAdded:Connect(function()
-	task.wait(1)
-	updateSpeed()
-	updateESP()
-end)
+    flyBodyVel = Instance.new("BodyVelocity")
+    flyBodyVel.Velocity    = Vector3.zero
+    flyBodyVel.MaxForce    = Vector3.new(1e5, 1e5, 1e5)
+    flyBodyVel.Parent      = root
 
--- Nouveaux joueurs
+    flyBodyGyro = Instance.new("BodyGyro")
+    flyBodyGyro.MaxTorque  = Vector3.new(1e5, 1e5, 1e5)
+    flyBodyGyro.D          = 50
+    flyBodyGyro.Parent     = root
+
+    local cam = workspace.CurrentCamera
+
+    flyConn = RunService.Heartbeat:Connect(function()
+        if not states.Fly then return end
+        local dir = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.Z) then
+            dir = dir + cam.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            dir = dir - cam.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.Q) then
+            dir = dir - cam.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            dir = dir + cam.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            dir = dir + Vector3.new(0, 1, 0)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+            dir = dir - Vector3.new(0, 1, 0)
+        end
+
+        flyBodyVel.Velocity   = dir.Magnitude > 0 and dir.Unit * FLY_SPEED or Vector3.zero
+        flyBodyGyro.CFrame    = cam.CFrame
+    end)
+end
+
+local function stopFly()
+    if flyConn then flyConn:Disconnect(); flyConn = nil end
+    if flyBodyVel  then flyBodyVel:Destroy();  flyBodyVel  = nil end
+    if flyBodyGyro then flyBodyGyro:Destroy(); flyBodyGyro = nil end
+    local hum = getHumanoid()
+    if hum then hum.PlatformStand = false end
+end
+
+-- ============================================================
+--  FONCTIONNALITÉ 5 — GOD MODE (côté client)
+-- ============================================================
+local function startGodMode()
+    local hum = getHumanoid()
+    if not hum then return end
+
+    godConn = hum.HealthChanged:Connect(function(health)
+        if states.GodMode and health < hum.MaxHealth then
+            hum.Health = hum.MaxHealth
+        end
+    end)
+    log("GodMode activé")
+end
+
+local function stopGodMode()
+    if godConn then godConn:Disconnect(); godConn = nil end
+    log("GodMode désactivé")
+end
+
+-- ============================================================
+--  FONCTIONNALITÉ 6 — INFINITE JUMP
+-- ============================================================
+local function startInfiniteJump()
+    infiniteConn = UserInputService.JumpRequest:Connect(function()
+        if states.InfiniteJump then
+            local hum = getHumanoid()
+            if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+        end
+    end)
+    log("InfiniteJump activé")
+end
+
+local function stopInfiniteJump()
+    if infiniteConn then infiniteConn:Disconnect(); infiniteConn = nil end
+    log("InfiniteJump désactivé")
+end
+
+-- ============================================================
+--  FONCTIONNALITÉ 7 — NAMETAGS
+-- ============================================================
+local function createNametag(p)
+    if not p.Character then return end
+    local head = p.Character:FindFirstChild("Head")
+    if not head then return end
+
+    if nametags[p] then nametags[p]:Destroy() end
+
+    local bb = Instance.new("BillboardGui")
+    bb.Name           = "AdminNametag"
+    bb.Size           = UDim2.new(0, 120, 0, 30)
+    bb.StudsOffset    = Vector3.new(0, 3, 0)
+    bb.AlwaysOnTop    = true
+    bb.MaxDistance    = 150
+    bb.Parent         = head
+
+    local lbl = Instance.new("TextLabel", bb)
+    lbl.Size              = UDim2.new(1, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text              = p.DisplayName
+    lbl.Font              = Enum.Font.GothamBold
+    lbl.TextSize          = 14
+    lbl.TextColor3        = Color3.fromRGB(210, 180, 255)
+    lbl.TextStrokeTransparency = 0.4
+    lbl.TextStrokeColor3  = Color3.fromRGB(0, 0, 0)
+
+    nametags[p] = bb
+end
+
+local function removeNametag(p)
+    if nametags[p] then
+        nametags[p]:Destroy()
+        nametags[p] = nil
+    end
+end
+
+local function refreshNametags()
+    if states.Nametags then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= player then
+                createNametag(p)
+                p.CharacterAdded:Connect(function()
+                    task.wait(0.5)
+                    if states.Nametags then createNametag(p) end
+                end)
+            end
+        end
+    else
+        for _, p in ipairs(Players:GetPlayers()) do
+            removeNametag(p)
+        end
+    end
+end
+
+-- ============================================================
+--  RÉAPPLICATION APRÈS RESPAWN
+-- ============================================================
+local function onCharacterAdded()
+    task.wait(1)
+    applySpeed()
+    applyJump()
+    if states.Fly          then startFly()         end
+    if states.GodMode      then startGodMode()     end
+    if states.InfiniteJump then startInfiniteJump() end
+    if states.ESP          then refreshESP()       end
+    if states.Nametags     then refreshNametags()  end
+    log("Personnage respawné — fonctionnalités réappliquées")
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
+
+-- ============================================================
+--  GESTION DES NOUVEAUX JOUEURS
+-- ============================================================
 Players.PlayerAdded:Connect(function(p)
-	p.CharacterAdded:Connect(function()
-		task.wait(1)
-		if espEnabled then
-			updateESP()
-		end
-	end)
+    p.CharacterAdded:Connect(function()
+        task.wait(0.5)
+        if states.ESP      then addHighlight(p.Character) end
+        if states.Nametags then createNametag(p)         end
+    end)
 end)
+
+Players.PlayerRemoving:Connect(function(p)
+    removeNametag(p)
+end)
+
+-- ============================================================
+--  CONNEXIONS DES BOUTONS
+-- ============================================================
+
+-- Générique : toggle état + callback
+local function connectToggle(btn, setFn, key, onCb, offCb)
+    btn.MouseButton1Click:Connect(function()
+        states[key] = not states[key]
+        setFn(states[key])
+        log(key .. " : " .. (states[key] and "ON" or "OFF"))
+        if states[key] then
+            if onCb  then onCb()  end
+        else
+            if offCb then offCb() end
+        end
+    end)
+end
+
+connectToggle(espBtn,      espSet,      "ESP",          refreshESP,         refreshESP)
+connectToggle(speedBtn,    speedSet,    "Speed",        applySpeed,         applySpeed)
+connectToggle(jumpBtn,     jumpSet,     "JumpBoost",    applyJump,          applyJump)
+connectToggle(flyBtn,      flySet,      "Fly",          startFly,           stopFly)
+connectToggle(godBtn,      godSet,      "GodMode",      startGodMode,       stopGodMode)
+connectToggle(infJumpBtn,  infJumpSet,  "InfiniteJump", startInfiniteJump,  stopInfiniteJump)
+connectToggle(nametagsBtn, nametagsSet, "Nametags",     refreshNametags,    refreshNametags)
+
+-- ============================================================
+--  ANIMATION D'OUVERTURE INITIALE
+-- ============================================================
+frame.Size    = UDim2.new(0, 0, 0, 0)
+frame.Visible = true
+task.defer(function()
+    TweenService:Create(frame, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 270, 0, 420)
+    }):Play()
+end)
+
+log("Admin Panel chargé — appuyez sur V pour afficher/cacher")

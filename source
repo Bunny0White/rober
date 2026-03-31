@@ -615,7 +615,8 @@ TBLbl.Font = Enum.Font.GothamBold
 TBLbl.Text = "ADMIN PANEL"
 TBLbl.TextColor3 = C.txt1
 TBLbl.TextSize = 12
-TBLbl.LetterSpacing = 1.5
+-- Supprimez cette ligne :
+-- TBLbl.LetterSpacing = 1.5  -- ❌ À enlever
 TBLbl.TextXAlignment = Enum.TextXAlignment.Left
 TBLbl.ZIndex = 52
 
@@ -743,7 +744,8 @@ HeaderTitle.Font = Enum.Font.GothamBold
 HeaderTitle.Text = "MOUVEMENTS"
 HeaderTitle.TextColor3 = C.txt1
 HeaderTitle.TextSize = 14
-HeaderTitle.LetterSpacing = 1
+-- Supprimez cette ligne :
+-- HeaderTitle.LetterSpacing = 1  -- ❌ À enlever
 HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
 HeaderTitle.ZIndex = 15
 
@@ -1141,7 +1143,8 @@ local function MakeSection(parent, label, order)
     lbl.Text = label
     lbl.TextColor3 = C.txt2
     lbl.TextSize = 9
-    lbl.LetterSpacing = 2
+    -- Supprimez cette ligne :
+    -- lbl.LetterSpacing = 2  -- ❌ À enlever
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.ZIndex = 12
     local line = Instance.new("Frame", f)
@@ -1198,7 +1201,8 @@ TpLbl.Font = Enum.Font.GothamBold
 TpLbl.Text = "🚀  TÉLÉPORTATION JOUEUR"
 TpLbl.TextColor3 = C.txt3
 TpLbl.TextSize = 10
-TpLbl.LetterSpacing = 1
+-- Supprimez cette ligne :
+-- TpLbl.LetterSpacing = 1  -- ❌ À enlever
 TpLbl.TextXAlignment = Enum.TextXAlignment.Left
 TpLbl.ZIndex = 13
 
@@ -1307,7 +1311,8 @@ WLbl.Font = Enum.Font.GothamBold
 WLbl.Text = "PRÉSETS HEURE"
 WLbl.TextColor3 = C.txt3
 WLbl.TextSize = 9
-WLbl.LetterSpacing = 1
+-- Supprimez cette ligne :
+-- WLbl.LetterSpacing = 1  -- ❌ À enlever
 WLbl.TextXAlignment = Enum.TextXAlignment.Left
 WLbl.ZIndex = 13
 
@@ -1351,7 +1356,8 @@ GLbl.Font = Enum.Font.GothamBold
 GLbl.Text = "GRAVITÉ WORKSPACE"
 GLbl.TextColor3 = C.txt3
 GLbl.TextSize = 10
-GLbl.LetterSpacing = 1
+-- Supprimez cette ligne :
+-- GLbl.LetterSpacing = 1  -- ❌ À enlever
 GLbl.TextXAlignment = Enum.TextXAlignment.Left
 GLbl.ZIndex = 13
 

@@ -1225,42 +1225,56 @@ SwitchTab("move")
 -- ════════════════════════════════════════════════════════════════════════
 --  TOGGLE PANEL (bouton + touche V)
 -- ════════════════════════════════════════════════════════════════════════
-local panelOpen=false
+local panelOpen = false
 
 local function OpenPanel()
-	panelOpen=true; Main.Visible=true
-	Main.Size=UDim2.new(0,PANEL_W,0,0)
-	Tween(Main,TI(0.42,Enum.EasingStyle.Back,Enum.EasingDirection.Out),
-		{Size=UDim2.new(0,PANEL_W,0,PANEL_H)})
-	TBArrow.Text="▴"
-	Tween(TBS,TI(0.2),{Transparency=0.1})
+	panelOpen = true
+	Main.Visible = true
+	Main.Size = UDim2.new(0, PANEL_W, 0, PANEL_H)
+	TBArrow.Text = "▴"
+	Tween(TBS, TI(0.2), {Transparency = 0.1})
 end
 
 local function ClosePanel()
-	panelOpen=false
-	Tween(Main,TI(0.32,Enum.EasingStyle.Back,Enum.EasingDirection.In),
-		{Size=UDim2.new(0,PANEL_W,0,0)})
-	task.delay(0.35,function() if not panelOpen then Main.Visible=false end end)
-	TBArrow.Text="▾"
-	Tween(TBS,TI(0.2),{Transparency=0.55})
+	panelOpen = false
+	Tween(Main, TI(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Size = UDim2.new(0, PANEL_W, 0, 0)})
+	task.delay(0.35, function()
+		if not panelOpen then
+			Main.Visible = false
+		end
+	end)
+	TBArrow.Text = "▾"
+	Tween(TBS, TI(0.2), {Transparency = 0.55})
 end
 
-local tbClickHandled=false
-TBBtn.MouseButton1Down:Connect(function()
-	tbClickHandled=false
-	tbDrag=false; tbDragStart=nil
-end)
-TBBtn.MouseButton1Click:Connect(function()
-	if not tbDrag then
-		if panelOpen then ClosePanel() else OpenPanel() end
-	end
-end)
-
-Track(UserInputService.InputBegan:Connect(function(inp,proc)
-	if not proc and inp.KeyCode==Enum.KeyCode.V then
-		if panelOpen then ClosePanel() else OpenPanel() end
+-- Connexion UNIQUE pour la touche V
+Track(UserInputService.InputBegan:Connect(function(inp, proc)
+	if not proc and inp.KeyCode == Enum.KeyCode.V then
+		print("Touche V détectée !")
+		if panelOpen then
+			ClosePanel()
+		else
+			OpenPanel()
+		end
 	end
 end))
+
+-- Gestion du clic sur le bouton Toggle
+TBBtn.MouseButton1Down:Connect(function()
+	tbClickHandled = false
+	tbDrag = false
+	tbDragStart = nil
+end)
+
+TBBtn.MouseButton1Click:Connect(function()
+	if not tbDrag then
+		if panelOpen then
+			ClosePanel()
+		else
+			OpenPanel()
+		end
+	end
+end)
 
 print("╔══════════════════════════════════════════╗")
 print("║   ADMIN PANEL v4 — Dashboard Edition !  ║")

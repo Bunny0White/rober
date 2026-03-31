@@ -1197,6 +1197,13 @@ end
 -- ════════════════════════════════════════════════════════════════════════
 SwitchTab("move")
 
+-- Notification de démarrage via StarterGui
+StarterGui:SetCore("SendNotification", {
+    Title   = "Admin Panel v4",
+    Text    = "Panel chargé avec succès ! Appuyez sur V pour l'ouvrir.",
+    Duration = 5,
+})
+
 -- ════════════════════════════════════════════════════════════════════════
 --  TOGGLE PANEL (bouton + touche V)
 -- ════════════════════════════════════════════════════════════════════════

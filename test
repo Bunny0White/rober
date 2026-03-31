@@ -1,0 +1,82 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+
+local localPlayer = Players.LocalPlayer
+local espEnabled = false
+local highlights = {}
+
+-- Créer le highlight
+local function createHighlight(character)
+	if not character then return end
+	
+	-- Supprime ancien highlight si existant
+	if character:FindFirstChild("ESP_Highlight") then
+		character.ESP_Highlight:Destroy()
+	end
+	
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "ESP_Highlight"
+	highlight.FillColor = Color3.fromRGB(255, 0, 0)
+	highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+	highlight.FillTransparency = 0.5
+	highlight.OutlineTransparency = 0
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.Parent = character
+	
+	return highlight
+end
+
+-- Appliquer ESP à un joueur
+local function setupPlayer(player)
+	if player == localPlayer then return end
+	
+	local function applyESP(character)
+		if espEnabled then
+			highlights[player] = createHighlight(character)
+		end
+	end
+	
+	-- Si déjà spawn
+	if player.Character then
+		applyESP(player.Character)
+	end
+	
+	-- Quand respawn
+	player.CharacterAdded:Connect(function(character)
+		task.wait(1) -- attendre chargement complet
+		applyESP(character)
+	end)
+end
+
+-- Initialisation
+for _, player in ipairs(Players:GetPlayers()) do
+	setupPlayer(player)
+end
+
+Players.PlayerAdded:Connect(setupPlayer)
+
+-- Toggle avec V
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	
+	if input.KeyCode == Enum.KeyCode.V then
+		espEnabled = not espEnabled
+		
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= localPlayer and player.Character then
+				
+				-- Supprimer
+				if player.Character:FindFirstChild("ESP_Highlight") then
+					player.Character.ESP_Highlight:Destroy()
+				end
+				
+				-- Recréer si activé
+				if espEnabled then
+					createHighlight(player.Character)
+				end
+			end
+		end
+		
+		print("ESP :", espEnabled and "ON" or "OFF")
+	end
+end)

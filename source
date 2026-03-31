@@ -98,7 +98,6 @@ local function LogError(msg, trace)
     })
     if #ErrorLog > 50 then table.remove(ErrorLog, #ErrorLog) end
 
-    -- Mise à jour de l'affichage
     for _, child in ipairs(ErrorList:GetChildren()) do
         if child:IsA("Frame") then child:Destroy() end
     end
@@ -144,7 +143,6 @@ local function LogError(msg, trace)
     end
 end
 
--- Capture des erreurs
 local function SafeCall(func)
     return xpcall(func, function(err)
         LogError("ERREUR: " .. err, debug.traceback())
@@ -178,7 +176,7 @@ NL.Padding = UDim.new(0, 6)
 NL.VerticalAlignment = Enum.VerticalAlignment.Bottom
 NL.SortOrder = Enum.SortOrder.LayoutOrder
 
-local NLPad = Instance.new("UIPadding", NotifList)
+local NLPad = Instance.new("UIPadding", NotifList")
 NLPad.PaddingBottom = UDim.new(0, 12)
 
 local notifCount = 0
@@ -615,8 +613,6 @@ TBLbl.Font = Enum.Font.GothamBold
 TBLbl.Text = "ADMIN PANEL"
 TBLbl.TextColor3 = C.txt1
 TBLbl.TextSize = 12
--- Supprimez cette ligne :
--- TBLbl.LetterSpacing = 1.5  -- ❌ À enlever
 TBLbl.TextXAlignment = Enum.TextXAlignment.Left
 TBLbl.ZIndex = 52
 
@@ -744,8 +740,6 @@ HeaderTitle.Font = Enum.Font.GothamBold
 HeaderTitle.Text = "MOUVEMENTS"
 HeaderTitle.TextColor3 = C.txt1
 HeaderTitle.TextSize = 14
--- Supprimez cette ligne :
--- HeaderTitle.LetterSpacing = 1  -- ❌ À enlever
 HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
 HeaderTitle.ZIndex = 15
 
@@ -868,7 +862,6 @@ local function AddTab(key, icon, title)
     btnLbl.Text = title:sub(1, 4):upper()
     btnLbl.TextSize = 7
     btnLbl.TextColor3 = C.txt2
-    btnLbl.LetterSpacing = 0.5
     btnLbl.ZIndex = 15
 
     local clickBtn = Instance.new("TextButton", btn)
@@ -1050,7 +1043,6 @@ local function MakeSlider(parent, label, unit, minV, maxV, defV, cfgKey, order, 
     Lbl.Text = label
     Lbl.TextColor3 = C.txt3
     Lbl.TextSize = 10
-    Lbl.LetterSpacing = 1
     Lbl.TextXAlignment = Enum.TextXAlignment.Left
     Lbl.ZIndex = 13
 
@@ -1143,8 +1135,6 @@ local function MakeSection(parent, label, order)
     lbl.Text = label
     lbl.TextColor3 = C.txt2
     lbl.TextSize = 9
-    -- Supprimez cette ligne :
-    -- lbl.LetterSpacing = 2  -- ❌ À enlever
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.ZIndex = 12
     local line = Instance.new("Frame", f)
@@ -1201,8 +1191,6 @@ TpLbl.Font = Enum.Font.GothamBold
 TpLbl.Text = "🚀  TÉLÉPORTATION JOUEUR"
 TpLbl.TextColor3 = C.txt3
 TpLbl.TextSize = 10
--- Supprimez cette ligne :
--- TpLbl.LetterSpacing = 1  -- ❌ À enlever
 TpLbl.TextXAlignment = Enum.TextXAlignment.Left
 TpLbl.ZIndex = 13
 
@@ -1311,8 +1299,6 @@ WLbl.Font = Enum.Font.GothamBold
 WLbl.Text = "PRÉSETS HEURE"
 WLbl.TextColor3 = C.txt3
 WLbl.TextSize = 9
--- Supprimez cette ligne :
--- WLbl.LetterSpacing = 1  -- ❌ À enlever
 WLbl.TextXAlignment = Enum.TextXAlignment.Left
 WLbl.ZIndex = 13
 
@@ -1356,8 +1342,6 @@ GLbl.Font = Enum.Font.GothamBold
 GLbl.Text = "GRAVITÉ WORKSPACE"
 GLbl.TextColor3 = C.txt3
 GLbl.TextSize = 10
--- Supprimez cette ligne :
--- GLbl.LetterSpacing = 1  -- ❌ À enlever
 GLbl.TextXAlignment = Enum.TextXAlignment.Left
 GLbl.ZIndex = 13
 
@@ -1402,10 +1386,10 @@ Instance.new("UICorner", GSK).CornerRadius = UDim.new(1, 0)
 
 local gDrag = false
 GSK.InputBegan:Connect(function(inp)
-    if inp.UserInputType == Enum.UserInputType.MouseButton1 then gDrag = true end
+    if inp.UserInputType == Enum.KeyCode.MouseButton1 then gDrag = true end
 end)
 Track(UserInputService.InputEnded:Connect(function(inp)
-    if inp.UserInputType == Enum.UserInputType.MouseButton1 then gDrag = false end
+    if inp.UserInputType == Enum.KeyCode.MouseButton1 then gDrag = false end
 end))
 Track(UserInputService.InputChanged:Connect(function(inp)
     if gDrag and inp.UserInputType == Enum.UserInputType.MouseMovement then
@@ -1419,7 +1403,7 @@ Track(UserInputService.InputChanged:Connect(function(inp)
     end
 end))
 GTBg.InputBegan:Connect(function(inp)
-    if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+    if inp.UserInputType == Enum.KeyCode.MouseButton1 then
         local abs = GTBg.AbsolutePosition; local w = GTBg.AbsoluteSize.X
         local rel = math.clamp((inp.Position.X - abs.X) / w, 0, 1)
         local v = math.floor(rel * 300 + 0.5)

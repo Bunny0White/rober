@@ -22,7 +22,7 @@ local CFG = {
 	JumpPower   = 90,
 	FlySpeed    = 50,
 	FOV         = 90,
-	TimeOfDay   = 14,
+	TimeOfDay   = 14,   -- heure (0-24)
 	ESPColor    = Color3.fromRGB(255, 60, 100),
 	ESPOutline  = Color3.fromRGB(255, 180, 200),
 }
@@ -31,16 +31,21 @@ local CFG = {
 -- │  ÉTAT GLOBAL                                                        │
 -- └─────────────────────────────────────────────────────────────────────┘
 local State = {
+	-- Mouvement
 	Speed        = false,
 	JumpBoost    = false,
 	Fly          = false,
 	InfiniteJump = false,
 	NoClip       = false,
+	-- Combat
 	GodMode      = false,
+	-- Vision
 	ESP          = false,
 	Nametags     = false,
 	FullBright   = false,
+	-- Monde
 	FogRemover   = false,
+	-- UI / Misc
 	NotifEnabled = true,
 }
 
@@ -53,6 +58,7 @@ local InfJumpConn  = nil
 local NoClipConn   = nil
 local CharConn     = nil
 
+-- Sauvegarde des valeurs Lighting originales
 local OrigLighting = {
 	Brightness      = Lighting.Brightness,
 	ClockTime       = Lighting.ClockTime,
@@ -129,7 +135,9 @@ local function Notify(title, msg, ntype)
 	t2.Text=msg; t2.TextColor3=Color3.fromRGB(80,88,130); t2.TextSize=10
 	t2.TextXAlignment=Enum.TextXAlignment.Left; t2.Parent=card
 
+	-- Apparition
 	Tween(card,TI(0.25,Enum.EasingStyle.Quart),{Size=UDim2.new(1,0,0,44),BackgroundTransparency=0})
+	-- Disparition
 	task.delay(2.8, function()
 		Tween(card,TI(0.3,Enum.EasingStyle.Quart,Enum.EasingDirection.In),
 			{BackgroundTransparency=1,Size=UDim2.new(1,0,0,0)})
@@ -155,6 +163,7 @@ local function FullCleanup()
 	if InfJumpConn then InfJumpConn:Disconnect() InfJumpConn=nil end
 	if NoClipConn  then NoClipConn:Disconnect()  NoClipConn=nil  end
 	if CharConn    then CharConn:Disconnect()     CharConn=nil    end
+	-- Restore lighting
 	Lighting.Brightness     = OrigLighting.Brightness
 	Lighting.ClockTime      = OrigLighting.ClockTime
 	Lighting.FogEnd         = OrigLighting.FogEnd
@@ -162,8 +171,10 @@ local function FullCleanup()
 	Lighting.GlobalShadows  = OrigLighting.GlobalShadows
 	Lighting.Ambient        = OrigLighting.Ambient
 	Lighting.OutdoorAmbient = OrigLighting.OutdoorAmbient
+	-- Restore FOV
 	local cam=workspace.CurrentCamera
 	if cam then cam.FieldOfView=70 end
+	-- ESP / Tags
 	for _,p in ipairs(Players:GetPlayers()) do
 		local c=p.Character
 		if c then
@@ -172,6 +183,7 @@ local function FullCleanup()
 			if head then local tag=head:FindFirstChild("__APtag"); if tag then tag:Destroy() end end
 		end
 	end
+	-- Connexions
 	for _,conn in ipairs(Connections) do pcall(function() conn:Disconnect() end) end
 	Connections={}
 	for k in pairs(State) do State[k]=false end
@@ -313,26 +325,31 @@ local function MakeTag(player)
 	local bb=Instance.new("BillboardGui")
 	bb.Name="__APtag"; bb.Size=UDim2.new(0,160,0,34)
 	bb.StudsOffset=Vector3.new(0,3.5,0); bb.AlwaysOnTop=true; bb.Parent=head
+	-- Fond
 	local bg=Instance.new("Frame")
 	bg.Size=UDim2.new(1,0,1,0); bg.BackgroundColor3=Color3.fromRGB(8,9,18)
 	bg.BackgroundTransparency=0.3; bg.BorderSizePixel=0; bg.Parent=bb
 	Instance.new("UICorner",bg).CornerRadius=UDim.new(0,6)
+	-- Barre couleur
 	local bar=Instance.new("Frame")
 	bar.Size=UDim2.new(0,3,0.8,0); bar.Position=UDim2.new(0,3,0.1,0)
 	bar.BackgroundColor3=Color3.fromRGB(99,140,255); bar.BorderSizePixel=0; bar.Parent=bg
 	Instance.new("UICorner",bar).CornerRadius=UDim.new(1,0)
+	-- Nom
 	local tx=Instance.new("TextLabel")
 	tx.Size=UDim2.new(1,-12,0.55,0); tx.Position=UDim2.new(0,10,0.05,0)
 	tx.BackgroundTransparency=1; tx.Font=Enum.Font.GothamBold
 	tx.Text=player.Name; tx.TextColor3=Color3.fromRGB(200,210,255)
 	tx.TextStrokeTransparency=0.5; tx.TextSize=12; tx.TextXAlignment=Enum.TextXAlignment.Left
 	tx.Parent=bg
+	-- Distance / Santé (temps réel)
 	local sub=Instance.new("TextLabel")
 	sub.Size=UDim2.new(1,-12,0.4,0); sub.Position=UDim2.new(0,10,0.55,0)
 	sub.BackgroundTransparency=1; sub.Font=Enum.Font.Gotham
 	sub.Text="HP: --"; sub.TextColor3=Color3.fromRGB(80,200,140)
 	sub.TextSize=10; sub.TextXAlignment=Enum.TextXAlignment.Left; sub.Parent=bg
 
+	-- Mise à jour HP en temps réel
 	local hpConn
 	hpConn=RunService.Heartbeat:Connect(function()
 		if not (bb and bb.Parent) then if hpConn then hpConn:Disconnect() end return end
@@ -396,7 +413,7 @@ local function ToggleFogRemover(on)
 	end
 end
 
--- ── 11. FOV ─────────────────────────────────────────────────────────────
+-- ── 11. FOV (Champ de vision) ────────────────────────────────────────────
 local function ApplyFOV()
 	local cam=workspace.CurrentCamera
 	if cam then cam.FieldOfView=CFG.FOV end
@@ -438,6 +455,7 @@ CharConn=Track(LocalPlayer.CharacterAdded:Connect(OnCharacterAdded))
 -- ║  INTERFACE — DASHBOARD                                              ║
 -- ╚══════════════════════════════════════════════════════════════════════╝
 
+-- Palette
 local C = {
 	bg0     = Color3.fromRGB(  7,  8, 14),
 	bg1     = Color3.fromRGB( 11, 13, 22),
@@ -462,6 +480,7 @@ local C = {
 	knobOn  = Color3.fromRGB(255,255,255),
 }
 
+-- Largeur totale du panel
 local PANEL_W  = 400
 local PANEL_H  = 600
 
@@ -471,7 +490,7 @@ SGui.Name="AdminPanelGui_v4"; SGui.ResetOnSpawn=false
 SGui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; SGui.Parent=LocalPlayer.PlayerGui
 
 -- ════════════════════════════════════════════════════════════════════════
---  BOUTON TOGGLE
+--  BOUTON TOGGLE (haut centre, déplaçable)
 -- ════════════════════════════════════════════════════════════════════════
 local ToggleBtn = Instance.new("Frame")
 ToggleBtn.Name="ToggleBtn"; ToggleBtn.Size=UDim2.new(0,160,0,34)
@@ -481,6 +500,7 @@ ToggleBtn.Parent=SGui
 Instance.new("UICorner",ToggleBtn).CornerRadius=UDim.new(0,10)
 local TBS=Instance.new("UIStroke",ToggleBtn); TBS.Color=C.accent; TBS.Thickness=1; TBS.Transparency=0.55
 
+-- Pastille
 local TBDot = Instance.new("Frame")
 TBDot.Size=UDim2.new(0,7,0,7); TBDot.Position=UDim2.new(0,10,0.5,-3.5)
 TBDot.BackgroundColor3=C.green; TBDot.BorderSizePixel=0; TBDot.ZIndex=52; TBDot.Parent=ToggleBtn
@@ -501,37 +521,21 @@ local TBBtn = Instance.new("TextButton")
 TBBtn.Size=UDim2.new(1,0,1,0); TBBtn.BackgroundTransparency=1; TBBtn.Text=""
 TBBtn.ZIndex=55; TBBtn.Parent=ToggleBtn
 
--- ════════════════════════════════════════════════════════════════════════
--- FIX DRAG — distingue clic et déplacement
--- ════════════════════════════════════════════════════════════════════════
-local tbDrag    = false
-local tbDragged = false   -- true si la souris a bougé pendant le drag
-local tbDragStart = nil
-local tbStartPos  = nil
-
+-- Drag toggle btn
+local tbDrag,tbDragStart,tbStartPos=false,nil,nil
 TBBtn.InputBegan:Connect(function(inp)
-	if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-		tbDrag    = true
-		tbDragged = false
-		tbDragStart = inp.Position
-		tbStartPos  = ToggleBtn.Position
+	if inp.UserInputType==Enum.UserInputType.MouseButton1 then
+		tbDrag=true; tbDragStart=inp.Position; tbStartPos=ToggleBtn.Position
 	end
 end)
-
 Track(UserInputService.InputChanged:Connect(function(inp)
-	if tbDrag and inp.UserInputType == Enum.UserInputType.MouseMovement then
-		local d = inp.Position - tbDragStart
-		if d.Magnitude > 4 then tbDragged = true end   -- seuil : vrai drag
-		ToggleBtn.Position = UDim2.new(
-			tbStartPos.X.Scale, tbStartPos.X.Offset + d.X,
-			tbStartPos.Y.Scale, tbStartPos.Y.Offset + d.Y)
+	if tbDrag and inp.UserInputType==Enum.UserInputType.MouseMovement then
+		local d=inp.Position-tbDragStart
+		ToggleBtn.Position=UDim2.new(tbStartPos.X.Scale,tbStartPos.X.Offset+d.X,tbStartPos.Y.Scale,tbStartPos.Y.Offset+d.Y)
 	end
 end))
-
 Track(UserInputService.InputEnded:Connect(function(inp)
-	if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-		tbDrag = false
-	end
+	if inp.UserInputType==Enum.UserInputType.MouseButton1 then tbDrag=false end
 end))
 
 -- ════════════════════════════════════════════════════════════════════════
@@ -547,16 +551,20 @@ Instance.new("UICorner",Main).CornerRadius=UDim.new(0,16)
 local MS=Instance.new("UIStroke",Main); MS.Color=C.accent; MS.Thickness=1; MS.Transparency=0.6
 
 -- ════════════════════════════════════════════════════════════════════════
---  SIDEBAR
+--  TOPBAR DASHBOARD (sidebar + header)
 -- ════════════════════════════════════════════════════════════════════════
+
+-- Sidebar gauche (navigation entre onglets)
 local Sidebar = Instance.new("Frame")
 Sidebar.Name="Sidebar"; Sidebar.Size=UDim2.new(0,52,1,0)
 Sidebar.BackgroundColor3=C.bg1; Sidebar.BorderSizePixel=0; Sidebar.ZIndex=12; Sidebar.Parent=Main
 Instance.new("UICorner",Sidebar).CornerRadius=UDim.new(0,16)
+-- Correctif coin droit
 local SBFix=Instance.new("Frame")
 SBFix.Size=UDim2.new(0,16,1,0); SBFix.Position=UDim2.new(1,-16,0,0)
 SBFix.BackgroundColor3=C.bg1; SBFix.BorderSizePixel=0; SBFix.ZIndex=12; SBFix.Parent=Sidebar
 
+-- Logo sidebar
 local SBLogo=Instance.new("TextLabel")
 SBLogo.Size=UDim2.new(1,0,0,48); SBLogo.BackgroundTransparency=1
 SBLogo.Font=Enum.Font.GothamBold; SBLogo.Text="AP"
@@ -568,14 +576,13 @@ SBList.SortOrder=Enum.SortOrder.LayoutOrder
 local SBPad=Instance.new("UIPadding",Sidebar)
 SBPad.PaddingTop=UDim.new(0,50); SBPad.PaddingLeft=UDim.new(0,6); SBPad.PaddingRight=UDim.new(0,6)
 
--- ════════════════════════════════════════════════════════════════════════
---  CONTENT + HEADER
--- ════════════════════════════════════════════════════════════════════════
+-- Zone contenu principale (à droite de la sidebar)
 local Content = Instance.new("Frame")
 Content.Name="Content"; Content.Size=UDim2.new(1,-52,1,0)
 Content.Position=UDim2.new(0,52,0,0); Content.BackgroundColor3=C.bg0
 Content.BorderSizePixel=0; Content.ClipsDescendants=true; Content.ZIndex=11; Content.Parent=Main
 
+-- Header du contenu
 local Header = Instance.new("Frame")
 Header.Size=UDim2.new(1,0,0,50); Header.BackgroundColor3=C.bg1
 Header.BorderSizePixel=0; Header.ZIndex=13; Header.Parent=Content
@@ -584,12 +591,14 @@ local HFix=Instance.new("Frame")
 HFix.Size=UDim2.new(1,0,0,14); HFix.Position=UDim2.new(0,0,1,-14)
 HFix.BackgroundColor3=C.bg1; HFix.BorderSizePixel=0; HFix.ZIndex=13; HFix.Parent=Header
 
+-- Titre dynamique (change selon l'onglet)
 local HeaderTitle = Instance.new("TextLabel")
 HeaderTitle.Size=UDim2.new(1,-120,1,0); HeaderTitle.Position=UDim2.new(0,14,0,0)
 HeaderTitle.BackgroundTransparency=1; HeaderTitle.Font=Enum.Font.GothamBold
 HeaderTitle.Text="MOUVEMENTS"; HeaderTitle.TextColor3=C.txt1; HeaderTitle.TextSize=14
 HeaderTitle.ZIndex=15; HeaderTitle.Parent=Header
 
+-- Compteur de fonctions actives
 local ActiveCount = Instance.new("TextLabel")
 ActiveCount.Size=UDim2.new(0,60,0,22); ActiveCount.Position=UDim2.new(1,-68,0.5,-11)
 ActiveCount.BackgroundColor3=C.bg3; ActiveCount.BorderSizePixel=0
@@ -598,6 +607,7 @@ ActiveCount.TextColor3=C.accent; ActiveCount.TextSize=10
 ActiveCount.TextXAlignment=Enum.TextXAlignment.Center; ActiveCount.ZIndex=15; ActiveCount.Parent=Header
 Instance.new("UICorner",ActiveCount).CornerRadius=UDim.new(0,6)
 
+-- Bouton fermer (header)
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size=UDim2.new(0,26,0,26); CloseBtn.Position=UDim2.new(1,-34,0.5,-13)
 CloseBtn.BackgroundColor3=C.danger; CloseBtn.Text="✕"; CloseBtn.TextColor3=Color3.new(1,1,1)
@@ -607,6 +617,7 @@ Instance.new("UICorner",CloseBtn).CornerRadius=UDim.new(0,7)
 CloseBtn.MouseEnter:Connect(function() Tween(CloseBtn,TI(0.1),{BackgroundColor3=Color3.fromRGB(255,50,70)}) end)
 CloseBtn.MouseLeave:Connect(function() Tween(CloseBtn,TI(0.1),{BackgroundColor3=C.danger}) end)
 CloseBtn.MouseButton1Click:Connect(function()
+	local panelOpen=false -- sera géré ci-dessous
 	Tween(Main,TI(0.35,Enum.EasingStyle.Back,Enum.EasingDirection.In),{Size=UDim2.new(0,PANEL_W,0,0)})
 	task.wait(0.38); FullCleanup(); SGui:Destroy()
 end)
@@ -629,7 +640,7 @@ Track(UserInputService.InputEnded:Connect(function(inp)
 end))
 
 -- ════════════════════════════════════════════════════════════════════════
---  COMPTEUR ACTIFS
+--  MISE À JOUR DU COMPTEUR D'ACTIFS
 -- ════════════════════════════════════════════════════════════════════════
 local function UpdateActiveCount()
 	local n=0
@@ -643,9 +654,10 @@ end
 -- ════════════════════════════════════════════════════════════════════════
 --  SYSTÈME D'ONGLETS
 -- ════════════════════════════════════════════════════════════════════════
-local Tabs = {}
+local Tabs = {}        -- { key, btn, page }
 local CurrentTab = nil
 
+-- Conteneur des pages
 local PageHolder = Instance.new("Frame")
 PageHolder.Size=UDim2.new(1,0,1,-54); PageHolder.Position=UDim2.new(0,0,0,54)
 PageHolder.BackgroundTransparency=1; PageHolder.BorderSizePixel=0
@@ -672,6 +684,7 @@ local function SwitchTab(key)
 end
 
 local function AddTab(key, icon, title)
+	-- Bouton sidebar
 	local btn=Instance.new("Frame")
 	btn.Size=UDim2.new(1,0,0,38); btn.BackgroundTransparency=1
 	btn.BackgroundColor3=Color3.fromRGB(0,0,0); btn.BorderSizePixel=0
@@ -693,6 +706,7 @@ local function AddTab(key, icon, title)
 	clickBtn.Size=UDim2.new(1,0,1,0); clickBtn.BackgroundTransparency=1
 	clickBtn.Text=""; clickBtn.ZIndex=20; clickBtn.Parent=btn
 
+	-- Page
 	local page=Instance.new("ScrollingFrame")
 	page.Size=UDim2.new(1,0,1,0); page.BackgroundTransparency=1
 	page.BorderSizePixel=0; page.ScrollBarThickness=3
@@ -725,8 +739,10 @@ local function AddTab(key, icon, title)
 end
 
 -- ════════════════════════════════════════════════════════════════════════
---  COMPOSANTS UI
+--  COMPOSANTS UI RÉUTILISABLES
 -- ════════════════════════════════════════════════════════════════════════
+
+-- ── Toggle Row ──────────────────────────────────────────────────────────
 local function MakeToggle(parent, icon, label, desc, key, order, accentColor)
 	accentColor = accentColor or C.accent
 	local Row=Instance.new("Frame")
@@ -734,6 +750,7 @@ local function MakeToggle(parent, icon, label, desc, key, order, accentColor)
 	Row.BorderSizePixel=0; Row.LayoutOrder=order; Row.Parent=parent
 	Instance.new("UICorner",Row).CornerRadius=UDim.new(0,10)
 
+	-- Bord gauche accent
 	local AccBar=Instance.new("Frame")
 	AccBar.Size=UDim2.new(0,3,0,30); AccBar.Position=UDim2.new(0,0,0.5,-15)
 	AccBar.BackgroundColor3=accentColor; AccBar.BorderSizePixel=0
@@ -761,6 +778,7 @@ local function MakeToggle(parent, icon, label, desc, key, order, accentColor)
 	Desc.Text=desc; Desc.TextColor3=C.txt2; Desc.TextSize=10
 	Desc.TextXAlignment=Enum.TextXAlignment.Left; Desc.ZIndex=13; Desc.Parent=Row
 
+	-- Switch
 	local Rail=Instance.new("Frame")
 	Rail.Size=UDim2.new(0,44,0,22); Rail.Position=UDim2.new(1,-54,0.5,-11)
 	Rail.BackgroundColor3=C.railOff; Rail.BorderSizePixel=0; Rail.ZIndex=13; Rail.Parent=Row
@@ -810,6 +828,7 @@ local function MakeToggle(parent, icon, label, desc, key, order, accentColor)
 	return SetV
 end
 
+-- ── Slider Row ──────────────────────────────────────────────────────────
 local function MakeSlider(parent, label, unit, minV, maxV, defV, cfgKey, order, onChange)
 	local Row=Instance.new("Frame")
 	Row.Size=UDim2.new(1,0,0,54); Row.BackgroundColor3=C.card
@@ -883,6 +902,7 @@ local function MakeSlider(parent, label, unit, minV, maxV, defV, cfgKey, order, 
 	Row.MouseLeave:Connect(function() Tween(Row,TI(0.12),{BackgroundColor3=C.card}) end)
 end
 
+-- ── Section label ───────────────────────────────────────────────────────
 local function MakeSection(parent, label, order)
 	local f=Instance.new("Frame")
 	f.Size=UDim2.new(1,0,0,28); f.BackgroundTransparency=1
@@ -896,6 +916,7 @@ local function MakeSection(parent, label, order)
 	line.BackgroundColor3=C.sep; line.BorderSizePixel=0; line.ZIndex=12; line.Parent=f
 end
 
+-- ── Séparateur ──────────────────────────────────────────────────────────
 local function MakeSep(parent, order)
 	local f=Instance.new("Frame")
 	f.Size=UDim2.new(1,0,0,6); f.BackgroundTransparency=1
@@ -931,6 +952,7 @@ MakeToggle(pageCombat,"🛡","God Mode","HP forcée au maximum (client)","GodMod
 MakeSep(pageCombat,3)
 MakeSection(pageCombat,"OUTILS",4)
 
+-- Téléportation vers un joueur
 local TpSection=Instance.new("Frame")
 TpSection.Size=UDim2.new(1,0,0,88); TpSection.BackgroundColor3=C.card
 TpSection.BorderSizePixel=0; TpSection.LayoutOrder=5; TpSection.Parent=pageCombat
@@ -941,6 +963,7 @@ TpLbl.Size=UDim2.new(1,-12,0,16); TpLbl.Position=UDim2.new(0,10,0,8)
 TpLbl.BackgroundTransparency=1; TpLbl.Font=Enum.Font.GothamBold
 TpLbl.Text="🚀  TÉLÉPORTATION JOUEUR"; TpLbl.TextColor3=C.txt3; TpLbl.TextSize=10
 
+-- Refresh de la liste
 local function RefreshPlayerList(scroll)
 	for _,ch in ipairs(scroll:GetChildren()) do
 		if ch:IsA("TextButton") then ch:Destroy() end
@@ -977,7 +1000,6 @@ TpList.SortOrder=Enum.SortOrder.LayoutOrder
 TpList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 	TpScroll.CanvasSize=UDim2.new(0,TpList.AbsoluteContentSize.X+8,1,0)
 end)
--- FIX : Instance (majuscule) au lieu de instance
 Instance.new("UIPadding",TpScroll).PaddingLeft=UDim.new(0,2)
 
 local TpRefBtn=Instance.new("TextButton")
@@ -1017,6 +1039,7 @@ MakeSection(pageWorld,"ENVIRONNEMENT",1)
 MakeSlider(pageWorld,"HEURE DU JOUR","h",0,24,CFG.TimeOfDay,"TimeOfDay",2,function(v) ApplyTime() end)
 MakeSep(pageWorld,3)
 
+-- Boutons météo rapide
 local WeatherRow=Instance.new("Frame")
 WeatherRow.Size=UDim2.new(1,0,0,54); WeatherRow.BackgroundColor3=C.card
 WeatherRow.BorderSizePixel=0; WeatherRow.LayoutOrder=4; WeatherRow.Parent=pageWorld
@@ -1028,6 +1051,7 @@ WLbl.BackgroundTransparency=1; WLbl.Font=Enum.Font.GothamBold
 WLbl.Text="PRÉSETS HEURE"; WLbl.TextColor3=C.txt3; WLbl.TextSize=9
 
 local presets = {{"🌅 Aube",6},{"☀ Midi",12},{"🌇 Soir",18},{"🌙 Nuit",0}}
+local presetBtnW = (PANEL_W-52-24-12*4) / 4
 for i,pr in ipairs(presets) do
 	local pb=Instance.new("TextButton")
 	pb.Size=UDim2.new(0.22,0,0,20); pb.Position=UDim2.new((i-1)*0.255,4,0,28)
@@ -1113,12 +1137,20 @@ local pageSettings = AddTab("settings","⚙","Params")
 
 MakeSection(pageSettings,"INTERFACE",1)
 
+-- Toggle notifications
 local notifToggle = MakeToggle(pageSettings,"🔔","Notifications","Afficher les alertes de statut","NotifEnabled",2,C.accent)
 State.NotifEnabled=true; notifToggle(true)
+-- Override dispatch pour NotifEnabled (pas dans Dispatch global)
+local OrigBtn
+do
+	-- Patch: on override le clic du toggle NotifEnabled
+	-- (le dispatch n'est pas requis, le toggle gère State directement)
+end
 
 MakeSep(pageSettings,3)
 MakeSection(pageSettings,"ACTIONS RAPIDES",4)
 
+-- Reset All
 local ResetRow=Instance.new("Frame")
 ResetRow.Size=UDim2.new(1,0,0,46); ResetRow.BackgroundColor3=C.card
 ResetRow.BorderSizePixel=0; ResetRow.LayoutOrder=5; ResetRow.Parent=pageSettings
@@ -1140,6 +1172,7 @@ ResetBtn.MouseLeave:Connect(function()
 	Tween(ResetBtn,TI(0.12),{BackgroundColor3=Color3.fromRGB(60,20,30)})
 end)
 ResetBtn.MouseButton1Click:Connect(function()
+	-- Reset toutes fonctions sans fermer le panel
 	local h=Hum()
 	if h then h.WalkSpeed=16; h.JumpPower=50; h.PlatformStand=false end
 	if FlyConn     then FlyConn:Disconnect()     FlyConn=nil     end
@@ -1185,47 +1218,46 @@ for i,inf in ipairs(infos) do
 end
 
 -- ════════════════════════════════════════════════════════════════════════
---  ONGLET PAR DÉFAUT
+--  SÉLECTION ONGLET PAR DÉFAUT
 -- ════════════════════════════════════════════════════════════════════════
 SwitchTab("move")
 
 -- ════════════════════════════════════════════════════════════════════════
 --  TOGGLE PANEL (bouton + touche V)
 -- ════════════════════════════════════════════════════════════════════════
-local panelOpen = false
+local panelOpen=false
 
 local function OpenPanel()
-	panelOpen = true
-	Main.Visible = true
-	Main.Size = UDim2.new(0, PANEL_W, 0, 0)
-	Tween(Main, TI(0.42, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-		{Size = UDim2.new(0, PANEL_W, 0, PANEL_H)})
-	TBArrow.Text = "▴"
-	Tween(TBS, TI(0.2), {Transparency = 0.1})
+	panelOpen=true; Main.Visible=true
+	Main.Size=UDim2.new(0,PANEL_W,0,0)
+	Tween(Main,TI(0.42,Enum.EasingStyle.Back,Enum.EasingDirection.Out),
+		{Size=UDim2.new(0,PANEL_W,0,PANEL_H)})
+	TBArrow.Text="▴"
+	Tween(TBS,TI(0.2),{Transparency=0.1})
 end
 
 local function ClosePanel()
-	panelOpen = false
-	Tween(Main, TI(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.In),
-		{Size = UDim2.new(0, PANEL_W, 0, 0)})
-	task.delay(0.35, function()
-		if not panelOpen then Main.Visible = false end
-	end)
-	TBArrow.Text = "▾"
-	Tween(TBS, TI(0.2), {Transparency = 0.55})
+	panelOpen=false
+	Tween(Main,TI(0.32,Enum.EasingStyle.Back,Enum.EasingDirection.In),
+		{Size=UDim2.new(0,PANEL_W,0,0)})
+	task.delay(0.35,function() if not panelOpen then Main.Visible=false end end)
+	TBArrow.Text="▾"
+	Tween(TBS,TI(0.2),{Transparency=0.55})
 end
 
--- ════════════════════════════════════════════════════════════════════════
--- FIX CLIC — utilise tbDragged pour ne pas déclencher si on a glissé
--- ════════════════════════════════════════════════════════════════════════
+local tbClickHandled=false
+TBBtn.MouseButton1Down:Connect(function()
+	tbClickHandled=false
+	tbDrag=false; tbDragStart=nil
+end)
 TBBtn.MouseButton1Click:Connect(function()
-	if not tbDragged then
+	if not tbDrag then
 		if panelOpen then ClosePanel() else OpenPanel() end
 	end
 end)
 
-Track(UserInputService.InputBegan:Connect(function(inp, proc)
-	if not proc and inp.KeyCode == Enum.KeyCode.V then
+Track(UserInputService.InputBegan:Connect(function(inp,proc)
+	if not proc and inp.KeyCode==Enum.KeyCode.V then
 		if panelOpen then ClosePanel() else OpenPanel() end
 	end
 end))

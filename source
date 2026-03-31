@@ -1,0 +1,870 @@
+-- ╔══════════════════════════════════════════════════════════════╗
+-- ║           ADMIN PANEL v3 — LocalScript Complet              ║
+-- ║  StarterPlayerScripts · Caché par défaut · V pour toggle    ║
+-- ╚══════════════════════════════════════════════════════════════╝
+
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  SERVICES                                                   │
+-- └─────────────────────────────────────────────────────────────┘
+local Players          = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService       = game:GetService("RunService")
+local TweenService     = game:GetService("TweenService")
+local LocalPlayer      = Players.LocalPlayer
+
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  CONFIGURATION — valeurs personnalisables                   │
+-- └─────────────────────────────────────────────────────────────┘
+local CFG = {
+    WalkSpeed  = 60,
+    JumpPower  = 90,
+    FlySpeed   = 50,
+    GodInterval= 0,    -- secondes entre chaque heal (0 = chaque heartbeat)
+}
+
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  ÉTAT GLOBAL                                                │
+-- └─────────────────────────────────────────────────────────────┘
+local State = {
+    ESP          = false,
+    Speed        = false,
+    JumpBoost    = false,
+    Fly          = false,
+    GodMode      = false,
+    InfiniteJump = false,
+    Nametags     = false,
+}
+
+-- Connexions et objets
+local Connections  = {}
+local FlyConn      = nil
+local FlyBV        = nil
+local FlyBG        = nil
+local GodConn      = nil
+local InfJumpConn  = nil
+local CharConn     = nil
+
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  UTILITAIRES                                                │
+-- └─────────────────────────────────────────────────────────────┘
+local function Char()  return LocalPlayer.Character end
+local function Hum()   local c=Char(); return c and c:FindFirstChildOfClass("Humanoid") end
+local function Root()  local c=Char(); return c and c:FindFirstChild("HumanoidRootPart") end
+
+local function Track(conn) table.insert(Connections, conn) return conn end
+
+local function TI(t, style, dir)
+    return TweenInfo.new(t,
+        style or Enum.EasingStyle.Quart,
+        dir   or Enum.EasingDirection.Out)
+end
+
+local function Tween(obj, info, props)
+    if obj and obj.Parent then
+        TweenService:Create(obj, info, props):Play()
+    end
+end
+
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  CLEANUP COMPLET                                            │
+-- └─────────────────────────────────────────────────────────────┘
+local function FullCleanup()
+    local h = Hum()
+    if h then
+        h.WalkSpeed     = 16
+        h.JumpPower     = 50
+        h.PlatformStand = false
+    end
+    if FlyConn     then FlyConn:Disconnect()    FlyConn    = nil end
+    if FlyBV       then FlyBV:Destroy()         FlyBV      = nil end
+    if FlyBG       then FlyBG:Destroy()         FlyBG      = nil end
+    if GodConn     then GodConn:Disconnect()    GodConn    = nil end
+    if InfJumpConn then InfJumpConn:Disconnect() InfJumpConn = nil end
+    if CharConn    then CharConn:Disconnect()   CharConn   = nil end
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        local c = p.Character
+        if c then
+            local hl = c:FindFirstChild("__APesp")
+            if hl then hl:Destroy() end
+            local head = c:FindFirstChild("Head")
+            if head then
+                local tag = head:FindFirstChild("__APtag")
+                if tag then tag:Destroy() end
+            end
+        end
+    end
+    for _, conn in ipairs(Connections) do pcall(function() conn:Disconnect() end) end
+    Connections = {}
+    for k in pairs(State) do State[k] = false end
+end
+
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  1. ESP                                                     │
+-- └─────────────────────────────────────────────────────────────┘
+local function ApplyESP(player)
+    if player == LocalPlayer then return end
+    local c = player.Character; if not c then return end
+    if c:FindFirstChild("__APesp") then return end
+    local hl = Instance.new("Highlight")
+    hl.Name                = "__APesp"
+    hl.FillColor           = Color3.fromRGB(255, 60, 100)
+    hl.OutlineColor        = Color3.fromRGB(255, 180, 200)
+    hl.FillTransparency    = 0.55
+    hl.OutlineTransparency = 0
+    hl.DepthMode           = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.Parent              = c
+end
+
+local function RemoveESP(player)
+    local c = player.Character; if not c then return end
+    local hl = c:FindFirstChild("__APesp"); if hl then hl:Destroy() end
+end
+
+local function ToggleESP(on)
+    if on then
+        for _, p in ipairs(Players:GetPlayers()) do ApplyESP(p) end
+        Track(Players.PlayerAdded:Connect(function(p)
+            Track(p.CharacterAdded:Connect(function()
+                task.wait(0.5); if State.ESP then ApplyESP(p) end
+            end))
+        end))
+    else
+        for _, p in ipairs(Players:GetPlayers()) do RemoveESP(p) end
+    end
+end
+
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  2. SPEED                                                   │
+-- └─────────────────────────────────────────────────────────────┘
+local function ApplySpeed()
+    local h = Hum(); if h then h.WalkSpeed = CFG.WalkSpeed end
+end
+local function ToggleSpeed(on)
+    if on then ApplySpeed()
+    else local h=Hum(); if h then h.WalkSpeed=16 end end
+end
+
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  3. JUMP BOOST                                              │
+-- └─────────────────────────────────────────────────────────────┘
+local function ApplyJump()
+    local h = Hum(); if h then h.JumpPower = CFG.JumpPower end
+end
+local function ToggleJump(on)
+    if on then ApplyJump()
+    else local h=Hum(); if h then h.JumpPower=50 end end
+end
+
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  4. FLY                                                     │
+-- └─────────────────────────────────────────────────────────────┘
+local function StartFly()
+    local r=Root(); local h=Hum(); if not r or not h then return end
+    h.PlatformStand = true
+    FlyBV = Instance.new("BodyVelocity")
+    FlyBV.Velocity = Vector3.zero
+    FlyBV.MaxForce = Vector3.new(1e5,1e5,1e5)
+    FlyBV.Parent   = r
+    FlyBG = Instance.new("BodyGyro")
+    FlyBG.MaxTorque = Vector3.new(1e5,1e5,1e5)
+    FlyBG.CFrame    = r.CFrame
+    FlyBG.P         = 1e4
+    FlyBG.Parent    = r
+    local cam = workspace.CurrentCamera
+    FlyConn = RunService.Heartbeat:Connect(function()
+        if not State.Fly or not FlyBV or not FlyBG then return end
+        local dir = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.Z) then dir=dir+cam.CFrame.LookVector  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S)                                                then dir=dir-cam.CFrame.LookVector  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.Q) then dir=dir-cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D)                                               then dir=dir+cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space)     then dir=dir+Vector3.yAxis end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir=dir-Vector3.yAxis end
+        FlyBV.Velocity = (dir.Magnitude>0 and dir.Unit or Vector3.zero)*CFG.FlySpeed
+        FlyBG.CFrame   = cam.CFrame
+    end)
+end
+
+local function StopFly()
+    if FlyConn then FlyConn:Disconnect() FlyConn=nil end
+    if FlyBV   then FlyBV:Destroy()   FlyBV=nil  end
+    if FlyBG   then FlyBG:Destroy()   FlyBG=nil  end
+    local h=Hum(); if h then h.PlatformStand=false end
+end
+
+local function ToggleFly(on)
+    if on then StartFly() else StopFly() end
+end
+
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  5. GOD MODE                                                │
+-- └─────────────────────────────────────────────────────────────┘
+local function ToggleGodMode(on)
+    if GodConn then GodConn:Disconnect() GodConn=nil end
+    if on then
+        GodConn = RunService.Heartbeat:Connect(function()
+            local h=Hum(); if h and h.Health<h.MaxHealth then h.Health=h.MaxHealth end
+        end)
+    end
+end
+
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  6. INFINITE JUMP                                           │
+-- └─────────────────────────────────────────────────────────────┘
+local function ToggleInfiniteJump(on)
+    if InfJumpConn then InfJumpConn:Disconnect() InfJumpConn=nil end
+    if on then
+        InfJumpConn = Track(UserInputService.JumpRequest:Connect(function()
+            local h=Hum(); if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
+        end))
+    end
+end
+
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  7. NAMETAGS                                                │
+-- └─────────────────────────────────────────────────────────────┘
+local function MakeTag(player)
+    if player==LocalPlayer then return end
+    local c=player.Character; if not c then return end
+    local head=c:FindFirstChild("Head"); if not head then return end
+    if head:FindFirstChild("__APtag") then return end
+    local bb=Instance.new("BillboardGui")
+    bb.Name="__APtag"; bb.Size=UDim2.new(0,150,0,30)
+    bb.StudsOffset=Vector3.new(0,3.2,0); bb.AlwaysOnTop=true; bb.Parent=head
+    local tx=Instance.new("TextLabel")
+    tx.Size=UDim2.new(1,0,1,0); tx.BackgroundTransparency=1
+    tx.Font=Enum.Font.GothamBold; tx.Text="✦ "..player.Name
+    tx.TextColor3=Color3.fromRGB(255,230,100)
+    tx.TextStrokeTransparency=0.3; tx.TextStrokeColor3=Color3.new(0,0,0)
+    tx.TextSize=13; tx.Parent=bb
+end
+
+local function RemoveTag(player)
+    local c=player.Character; if not c then return end
+    local head=c:FindFirstChild("Head"); if not head then return end
+    local tag=head:FindFirstChild("__APtag"); if tag then tag:Destroy() end
+end
+
+local function ToggleNametags(on)
+    if on then
+        for _,p in ipairs(Players:GetPlayers()) do MakeTag(p) end
+        Track(Players.PlayerAdded:Connect(function(p)
+            Track(p.CharacterAdded:Connect(function()
+                task.wait(0.5); if State.Nametags then MakeTag(p) end
+            end))
+        end))
+    else
+        for _,p in ipairs(Players:GetPlayers()) do RemoveTag(p) end
+    end
+end
+
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  DISPATCH                                                   │
+-- └─────────────────────────────────────────────────────────────┘
+local Dispatch = {
+    ESP=ToggleESP, Speed=ToggleSpeed, JumpBoost=ToggleJump,
+    Fly=ToggleFly, GodMode=ToggleGodMode,
+    InfiniteJump=ToggleInfiniteJump, Nametags=ToggleNametags,
+}
+
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  RESPAWN                                                    │
+-- └─────────────────────────────────────────────────────────────┘
+local function OnCharacterAdded(char)
+    char:WaitForChild("Humanoid",8); task.wait(0.6)
+    if State.Speed        then ApplySpeed()        end
+    if State.JumpBoost    then ApplyJump()         end
+    if State.GodMode      then ToggleGodMode(true) end
+    if State.Fly          then task.wait(0.2); StartFly() end
+    if State.ESP          then for _,p in ipairs(Players:GetPlayers()) do ApplyESP(p) end end
+    if State.Nametags     then for _,p in ipairs(Players:GetPlayers()) do MakeTag(p) end end
+end
+CharConn = Track(LocalPlayer.CharacterAdded:Connect(OnCharacterAdded))
+
+-- ╔══════════════════════════════════════════════════════════════╗
+-- ║  INTERFACE                                                  ║
+-- ╚══════════════════════════════════════════════════════════════╝
+
+local C = {
+    bg0    = Color3.fromRGB(  8,  9, 15),
+    bg1    = Color3.fromRGB( 13, 14, 26),
+    bg2    = Color3.fromRGB( 18, 20, 36),
+    bg3    = Color3.fromRGB( 24, 27, 48),
+    accent = Color3.fromRGB( 99,140,255),
+    danger = Color3.fromRGB(255, 80,110),
+    railOff= Color3.fromRGB( 38, 42, 72),
+    railOn = Color3.fromRGB( 99,140,255),
+    knobOff= Color3.fromRGB(100,108,155),
+    knobOn = Color3.fromRGB(255,255,255),
+    txt1   = Color3.fromRGB(200,210,255),
+    txt2   = Color3.fromRGB( 80, 88,130),
+    green  = Color3.fromRGB( 50,220,140),
+    yellow = Color3.fromRGB(255,220, 80),
+    sep    = Color3.fromRGB( 22, 25, 44),
+}
+
+-- ── ScreenGui ─────────────────────────────────────────────────
+local SGui = Instance.new("ScreenGui")
+SGui.Name           = "AdminPanelGui_v3"
+SGui.ResetOnSpawn   = false
+SGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+SGui.Parent         = LocalPlayer.PlayerGui
+
+-- ════════════════════════════════════════════════════════════════
+--  ANIMATION DE CHARGEMENT (loading screen)
+-- ════════════════════════════════════════════════════════════════
+local LoadFrame = Instance.new("Frame")
+LoadFrame.Size             = UDim2.fromScale(1,1)
+LoadFrame.BackgroundColor3 = C.bg0
+LoadFrame.ZIndex           = 200
+LoadFrame.Parent           = SGui
+
+-- Ligne de chargement
+local BarBg = Instance.new("Frame")
+BarBg.Size             = UDim2.new(0,240,0,3)
+BarBg.Position         = UDim2.new(0.5,-120,0.5,24)
+BarBg.BackgroundColor3 = C.bg3
+BarBg.BorderSizePixel  = 0
+BarBg.ZIndex           = 202
+BarBg.Parent           = LoadFrame
+Instance.new("UICorner",BarBg).CornerRadius = UDim.new(1,0)
+
+local BarFill = Instance.new("Frame")
+BarFill.Size             = UDim2.new(0,0,1,0)
+BarFill.BackgroundColor3 = C.accent
+BarFill.BorderSizePixel  = 0
+BarFill.ZIndex           = 203
+BarFill.Parent           = BarBg
+Instance.new("UICorner",BarFill).CornerRadius = UDim.new(1,0)
+
+local LoadTxt = Instance.new("TextLabel")
+LoadTxt.Size                 = UDim2.new(0,240,0,20)
+LoadTxt.Position             = UDim2.new(0.5,-120,0.5,-16)
+LoadTxt.BackgroundTransparency = 1
+LoadTxt.Font                 = Enum.Font.GothamBold
+LoadTxt.Text                 = "ADMIN PANEL"
+LoadTxt.TextColor3           = C.txt1
+LoadTxt.TextSize             = 18
+LoadTxt.LetterSpacing        = 4
+LoadTxt.TextXAlignment       = Enum.TextXAlignment.Center
+LoadTxt.ZIndex               = 202
+LoadTxt.Parent               = LoadFrame
+
+local LoadSub = Instance.new("TextLabel")
+LoadSub.Size                 = UDim2.new(0,240,0,14)
+LoadSub.Position             = UDim2.new(0.5,-120,0.5,32)
+LoadSub.BackgroundTransparency = 1
+LoadSub.Font                 = Enum.Font.Gotham
+LoadSub.Text                 = "Chargement..."
+LoadSub.TextColor3           = C.txt2
+LoadSub.TextSize             = 11
+LoadSub.TextXAlignment       = Enum.TextXAlignment.Center
+LoadSub.ZIndex               = 202
+LoadSub.Parent               = LoadFrame
+
+-- Animation de la barre de chargement
+task.spawn(function()
+    local steps = {"Initialisation...", "Chargement ESP...", "Chargement Fly...", "Interface..."}
+    for i, txt in ipairs(steps) do
+        LoadSub.Text = txt
+        Tween(BarFill, TI(0.35, Enum.EasingStyle.Quart),
+            {Size = UDim2.new(i/4, 0, 1, 0)})
+        task.wait(0.38)
+    end
+    task.wait(0.15)
+    Tween(LoadFrame, TI(0.45, Enum.EasingStyle.Quart), {BackgroundTransparency=1})
+    -- fade tous les enfants
+    for _, ch in ipairs(LoadFrame:GetDescendants()) do
+        if ch:IsA("TextLabel") then
+            Tween(ch, TI(0.35), {TextTransparency=1})
+        elseif ch:IsA("Frame") then
+            Tween(ch, TI(0.35), {BackgroundTransparency=1})
+        end
+    end
+    task.wait(0.5)
+    LoadFrame:Destroy()
+end)
+
+-- ════════════════════════════════════════════════════════════════
+--  BOUTON TOGGLE (toujours visible, en haut au centre)
+-- ════════════════════════════════════════════════════════════════
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name            = "ToggleBtn"
+ToggleBtn.Size            = UDim2.new(0,140,0,30)
+ToggleBtn.AnchorPoint     = Vector2.new(0.5,0)
+ToggleBtn.Position        = UDim2.new(0.5,0,0,8)
+ToggleBtn.BackgroundColor3= C.bg1
+ToggleBtn.BorderSizePixel = 0
+ToggleBtn.AutoButtonColor = false
+ToggleBtn.Text            = "▾  ADMIN PANEL"
+ToggleBtn.Font            = Enum.Font.GothamBold
+ToggleBtn.TextColor3      = C.accent
+ToggleBtn.TextSize        = 12
+ToggleBtn.LetterSpacing   = 1
+ToggleBtn.ZIndex          = 50
+ToggleBtn.Parent          = SGui
+Instance.new("UICorner",ToggleBtn).CornerRadius = UDim.new(0,8)
+local TBStroke = Instance.new("UIStroke",ToggleBtn)
+TBStroke.Color       = C.accent
+TBStroke.Thickness   = 1
+TBStroke.Transparency= 0.5
+
+-- Drag du bouton toggle
+local tbDrag, tbDragStart, tbStartPos = false, nil, nil
+ToggleBtn.InputBegan:Connect(function(inp)
+    if inp.UserInputType==Enum.UserInputType.MouseButton1 then
+        tbDrag=true; tbDragStart=inp.Position; tbStartPos=ToggleBtn.Position
+    end
+end)
+Track(UserInputService.InputChanged:Connect(function(inp)
+    if tbDrag and inp.UserInputType==Enum.UserInputType.MouseMovement then
+        local d=inp.Position-tbDragStart
+        ToggleBtn.Position=UDim2.new(
+            tbStartPos.X.Scale, tbStartPos.X.Offset+d.X,
+            tbStartPos.Y.Scale, tbStartPos.Y.Offset+d.Y)
+    end
+end))
+Track(UserInputService.InputEnded:Connect(function(inp)
+    if inp.UserInputType==Enum.UserInputType.MouseButton1 then tbDrag=false end
+end))
+
+ToggleBtn.MouseEnter:Connect(function()
+    Tween(ToggleBtn,TI(0.12),{BackgroundColor3=C.bg3})
+end)
+ToggleBtn.MouseLeave:Connect(function()
+    Tween(ToggleBtn,TI(0.12),{BackgroundColor3=C.bg1})
+end)
+
+-- ════════════════════════════════════════════════════════════════
+--  PANEL PRINCIPAL (caché par défaut)
+-- ════════════════════════════════════════════════════════════════
+local Main = Instance.new("Frame")
+Main.Name             = "Main"
+Main.AnchorPoint      = Vector2.new(0.5,0)
+Main.Size             = UDim2.new(0,320,0,0)      -- commence à 0 hauteur
+Main.Position         = UDim2.new(0.5,0,0,46)
+Main.BackgroundColor3 = C.bg1
+Main.BorderSizePixel  = 0
+Main.ClipsDescendants = true
+Main.Visible          = false
+Main.ZIndex           = 10
+Main.Parent           = SGui
+Instance.new("UICorner",Main).CornerRadius = UDim.new(0,14)
+local MainStroke = Instance.new("UIStroke",Main)
+MainStroke.Color       = C.accent
+MainStroke.Thickness   = 1
+MainStroke.Transparency= 0.55
+
+-- ── Barre titre intérieure ─────────────────────────────────────
+local TBar = Instance.new("Frame")
+TBar.Name            = "TBar"
+TBar.Size            = UDim2.new(1,0,0,48)
+TBar.BackgroundColor3= C.bg0
+TBar.BorderSizePixel = 0
+TBar.ZIndex          = 12
+TBar.Parent          = Main
+Instance.new("UICorner",TBar).CornerRadius = UDim.new(0,14)
+
+-- Correctif coins inférieurs
+local TBarFix = Instance.new("Frame")
+TBarFix.Size=UDim2.new(1,0,0,14); TBarFix.Position=UDim2.new(0,0,1,-14)
+TBarFix.BackgroundColor3=C.bg0; TBarFix.BorderSizePixel=0; TBarFix.ZIndex=12
+TBarFix.Parent=TBar
+
+-- Pastille verte pulsante
+local Dot = Instance.new("Frame")
+Dot.Size=UDim2.new(0,8,0,8); Dot.Position=UDim2.new(0,14,0.5,-4)
+Dot.BackgroundColor3=C.green; Dot.BorderSizePixel=0; Dot.ZIndex=14
+Dot.Parent=TBar
+Instance.new("UICorner",Dot).CornerRadius=UDim.new(1,0)
+
+task.spawn(function()
+    while Dot and Dot.Parent do
+        Tween(Dot,TI(0.7,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),
+            {BackgroundTransparency=0.75,Size=UDim2.new(0,11,0,11),Position=UDim2.new(0,12.5,0.5,-5.5)})
+        task.wait(0.72)
+        if not (Dot and Dot.Parent) then break end
+        Tween(Dot,TI(0.7,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),
+            {BackgroundTransparency=0,Size=UDim2.new(0,8,0,8),Position=UDim2.new(0,14,0.5,-4)})
+        task.wait(0.72)
+    end
+end)
+
+-- Titre & sous-titre
+local TitleLbl = Instance.new("TextLabel")
+TitleLbl.Size=UDim2.new(1,-100,1,0); TitleLbl.Position=UDim2.new(0,30,0,0)
+TitleLbl.BackgroundTransparency=1; TitleLbl.Font=Enum.Font.GothamBold
+TitleLbl.Text="ADMIN PANEL"; TitleLbl.TextColor3=C.txt1; TitleLbl.TextSize=14
+TitleLbl.LetterSpacing=2; TitleLbl.TextXAlignment=Enum.TextXAlignment.Left
+TitleLbl.ZIndex=14; TitleLbl.Parent=TBar
+
+local SubLbl = Instance.new("TextLabel")
+SubLbl.Size=UDim2.new(1,-100,0,12); SubLbl.Position=UDim2.new(0,30,1,-14)
+SubLbl.BackgroundTransparency=1; SubLbl.Font=Enum.Font.Gotham
+SubLbl.Text="v3.0  ·  "..LocalPlayer.Name; SubLbl.TextColor3=C.txt2
+SubLbl.TextSize=10; SubLbl.TextXAlignment=Enum.TextXAlignment.Left
+SubLbl.ZIndex=14; SubLbl.Parent=TBar
+
+-- Bouton fermer
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size=UDim2.new(0,28,0,28); CloseBtn.Position=UDim2.new(1,-36,0.5,-14)
+CloseBtn.BackgroundColor3=C.danger; CloseBtn.Text="✕"
+CloseBtn.TextColor3=Color3.new(1,1,1); CloseBtn.Font=Enum.Font.GothamBold
+CloseBtn.TextSize=13; CloseBtn.BorderSizePixel=0; CloseBtn.AutoButtonColor=false
+CloseBtn.ZIndex=15; CloseBtn.Parent=TBar
+Instance.new("UICorner",CloseBtn).CornerRadius=UDim.new(0,7)
+CloseBtn.MouseEnter:Connect(function() Tween(CloseBtn,TI(0.1),{BackgroundColor3=Color3.fromRGB(255,50,70)}) end)
+CloseBtn.MouseLeave:Connect(function() Tween(CloseBtn,TI(0.1),{BackgroundColor3=C.danger}) end)
+CloseBtn.MouseButton1Click:Connect(function()
+    Tween(Main,TI(0.35,Enum.EasingStyle.Back,Enum.EasingDirection.In),{Size=UDim2.new(0,320,0,0)})
+    task.wait(0.38)
+    FullCleanup()
+    SGui:Destroy()
+end)
+
+-- Drag du panel via barre titre
+local pDrag, pDragStart, pStartPos = false, nil, nil
+TBar.InputBegan:Connect(function(inp)
+    if inp.UserInputType==Enum.UserInputType.MouseButton1 then
+        pDrag=true; pDragStart=inp.Position; pStartPos=Main.Position
+    end
+end)
+Track(UserInputService.InputChanged:Connect(function(inp)
+    if pDrag and inp.UserInputType==Enum.UserInputType.MouseMovement then
+        local d=inp.Position-pDragStart
+        Main.Position=UDim2.new(
+            pStartPos.X.Scale, pStartPos.X.Offset+d.X,
+            pStartPos.Y.Scale, pStartPos.Y.Offset+d.Y)
+    end
+end))
+Track(UserInputService.InputEnded:Connect(function(inp)
+    if inp.UserInputType==Enum.UserInputType.MouseButton1 then pDrag=false end
+end))
+
+-- ── ScrollingFrame ─────────────────────────────────────────────
+local Scroll = Instance.new("ScrollingFrame")
+Scroll.Name="Scroll"; Scroll.Size=UDim2.new(1,-10,1,-58)
+Scroll.Position=UDim2.new(0,5,0,52); Scroll.BackgroundTransparency=1
+Scroll.BorderSizePixel=0; Scroll.ScrollBarThickness=3
+Scroll.ScrollBarImageColor3=C.accent; Scroll.CanvasSize=UDim2.new(0,0,0,0)
+Scroll.ZIndex=11; Scroll.Parent=Main
+
+local List = Instance.new("UIListLayout",Scroll)
+List.Padding=UDim.new(0,0); List.SortOrder=Enum.SortOrder.LayoutOrder
+List.HorizontalAlignment=Enum.HorizontalAlignment.Center
+
+local SPad = Instance.new("UIPadding",Scroll)
+SPad.PaddingTop=UDim.new(0,4); SPad.PaddingBottom=UDim.new(0,8)
+
+List:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    Scroll.CanvasSize=UDim2.new(0,0,0,List.AbsoluteContentSize.Y+14)
+end)
+
+-- ════════════════════════════════════════════════════════════════
+--  SÉPARATEUR DE SECTION
+-- ════════════════════════════════════════════════════════════════
+local function MakeSection(label, order)
+    local f = Instance.new("Frame")
+    f.Size=UDim2.new(1,0,0,26); f.BackgroundTransparency=1
+    f.LayoutOrder=order; f.Parent=Scroll
+    local lbl = Instance.new("TextLabel")
+    lbl.Size=UDim2.new(1,-16,1,0); lbl.Position=UDim2.new(0,12,0,0)
+    lbl.BackgroundTransparency=1; lbl.Font=Enum.Font.GothamBold
+    lbl.Text=label; lbl.TextColor3=C.txt2; lbl.TextSize=9
+    lbl.LetterSpacing=2; lbl.TextXAlignment=Enum.TextXAlignment.Left
+    lbl.ZIndex=12; lbl.Parent=f
+    -- ligne décorative
+    local line = Instance.new("Frame")
+    line.Size=UDim2.new(1,-12,0,1); line.Position=UDim2.new(0,6,1,-1)
+    line.BackgroundColor3=C.sep; line.BorderSizePixel=0; line.ZIndex=12
+    line.Parent=f
+end
+
+-- ════════════════════════════════════════════════════════════════
+--  TOGGLE ROW
+-- ════════════════════════════════════════════════════════════════
+local function MakeToggle(icon, label, desc, key, order)
+    local Row = Instance.new("Frame")
+    Row.Size=UDim2.new(1,-12,0,54); Row.BackgroundColor3=C.bg2
+    Row.BorderSizePixel=0; Row.LayoutOrder=order; Row.Parent=Scroll
+    Instance.new("UICorner",Row).CornerRadius=UDim.new(0,10)
+
+    -- Bord gauche (accent actif)
+    local AccBar = Instance.new("Frame")
+    AccBar.Size=UDim2.new(0,3,0,32); AccBar.Position=UDim2.new(0,0,0.5,-16)
+    AccBar.BackgroundColor3=C.accent; AccBar.BorderSizePixel=0
+    AccBar.BackgroundTransparency=1; AccBar.ZIndex=13; AccBar.Parent=Row
+    Instance.new("UICorner",AccBar).CornerRadius=UDim.new(1,0)
+
+    -- Icône
+    local IconF = Instance.new("Frame")
+    IconF.Size=UDim2.new(0,32,0,32); IconF.Position=UDim2.new(0,11,0.5,-16)
+    IconF.BackgroundColor3=C.bg0; IconF.BorderSizePixel=0; IconF.ZIndex=13
+    IconF.Parent=Row
+    Instance.new("UICorner",IconF).CornerRadius=UDim.new(0,9)
+    local IconTxt = Instance.new("TextLabel")
+    IconTxt.Size=UDim2.new(1,0,1,0); IconTxt.BackgroundTransparency=1
+    IconTxt.Font=Enum.Font.GothamBold; IconTxt.Text=icon
+    IconTxt.TextSize=16; IconTxt.TextColor3=C.txt2; IconTxt.ZIndex=14
+    IconTxt.Parent=IconF
+
+    -- Textes
+    local Lbl = Instance.new("TextLabel")
+    Lbl.Size=UDim2.new(1,-110,0,18); Lbl.Position=UDim2.new(0,50,0,9)
+    Lbl.BackgroundTransparency=1; Lbl.Font=Enum.Font.GothamBold
+    Lbl.Text=label; Lbl.TextColor3=C.txt1; Lbl.TextSize=13
+    Lbl.TextXAlignment=Enum.TextXAlignment.Left; Lbl.ZIndex=13; Lbl.Parent=Row
+
+    local Desc = Instance.new("TextLabel")
+    Desc.Size=UDim2.new(1,-110,0,13); Desc.Position=UDim2.new(0,50,0,27)
+    Desc.BackgroundTransparency=1; Desc.Font=Enum.Font.Gotham
+    Desc.Text=desc; Desc.TextColor3=C.txt2; Desc.TextSize=10
+    Desc.TextXAlignment=Enum.TextXAlignment.Left; Desc.ZIndex=13; Desc.Parent=Row
+
+    -- Rail + Knob
+    local Rail = Instance.new("Frame")
+    Rail.Size=UDim2.new(0,44,0,22); Rail.Position=UDim2.new(1,-54,0.5,-11)
+    Rail.BackgroundColor3=C.railOff; Rail.BorderSizePixel=0; Rail.ZIndex=13
+    Rail.Parent=Row
+    Instance.new("UICorner",Rail).CornerRadius=UDim.new(1,0)
+    local Knob = Instance.new("Frame")
+    Knob.Size=UDim2.new(0,16,0,16); Knob.Position=UDim2.new(0,3,0.5,-8)
+    Knob.BackgroundColor3=C.knobOff; Knob.BorderSizePixel=0; Knob.ZIndex=14
+    Knob.Parent=Rail
+    Instance.new("UICorner",Knob).CornerRadius=UDim.new(1,0)
+
+    -- Texte ON/OFF
+    local StatusTxt = Instance.new("TextLabel")
+    StatusTxt.Size=UDim2.new(0,44,0,11); StatusTxt.Position=UDim2.new(1,-55,1,-13)
+    StatusTxt.BackgroundTransparency=1; StatusTxt.Font=Enum.Font.GothamBold
+    StatusTxt.Text="OFF"; StatusTxt.TextColor3=C.txt2; StatusTxt.TextSize=9
+    StatusTxt.TextXAlignment=Enum.TextXAlignment.Center; StatusTxt.ZIndex=14
+    StatusTxt.Parent=Row
+
+    -- Bouton invisible
+    local Btn = Instance.new("TextButton")
+    Btn.Size=UDim2.new(1,0,1,0); Btn.BackgroundTransparency=1
+    Btn.Text=""; Btn.ZIndex=20; Btn.Parent=Row
+
+    local function SetVisual(active)
+        local ti = TI(0.2, Enum.EasingStyle.Quad)
+        if active then
+            Tween(Rail, ti, {BackgroundColor3=C.railOn})
+            Tween(Knob, ti, {Position=UDim2.new(0,25,0.5,-8), BackgroundColor3=C.knobOn})
+            Tween(AccBar, ti, {BackgroundTransparency=0})
+            Tween(IconF, ti, {BackgroundColor3=Color3.fromRGB(25,35,70)})
+            Tween(IconTxt, ti, {TextColor3=C.accent})
+            Tween(Lbl, ti, {TextColor3=C.accent})
+            StatusTxt.Text="ON"; StatusTxt.TextColor3=C.green
+        else
+            Tween(Rail, ti, {BackgroundColor3=C.railOff})
+            Tween(Knob, ti, {Position=UDim2.new(0,3,0.5,-8), BackgroundColor3=C.knobOff})
+            Tween(AccBar, ti, {BackgroundTransparency=1})
+            Tween(IconF, ti, {BackgroundColor3=C.bg0})
+            Tween(IconTxt, ti, {TextColor3=C.txt2})
+            Tween(Lbl, ti, {TextColor3=C.txt1})
+            StatusTxt.Text="OFF"; StatusTxt.TextColor3=C.txt2
+        end
+    end
+
+    Btn.MouseEnter:Connect(function() Tween(Row,TI(0.12),{BackgroundColor3=C.bg3}) end)
+    Btn.MouseLeave:Connect(function() Tween(Row,TI(0.12),{BackgroundColor3=C.bg2}) end)
+
+    Btn.MouseButton1Click:Connect(function()
+        State[key] = not State[key]
+        SetVisual(State[key])
+        -- Bounce knob
+        local bp = State[key] and UDim2.new(0,22,0.5,-8) or UDim2.new(0,5,0.5,-8)
+        Tween(Knob, TI(0.07,Enum.EasingStyle.Back,Enum.EasingDirection.Out), {Position=bp})
+        task.delay(0.09, function()
+            local fp = State[key] and UDim2.new(0,25,0.5,-8) or UDim2.new(0,3,0.5,-8)
+            Tween(Knob, TI(0.1,Enum.EasingStyle.Quad), {Position=fp})
+        end)
+        Dispatch[key](State[key])
+    end)
+
+    -- Apparition différée
+    Row.BackgroundTransparency=1
+    task.delay(0.1+order*0.055, function()
+        if Row and Row.Parent then
+            Tween(Row, TI(0.3,Enum.EasingStyle.Quad), {BackgroundTransparency=0})
+        end
+    end)
+
+    return SetVisual
+end
+
+-- ════════════════════════════════════════════════════════════════
+--  SLIDER ROW (avec valeur réglable)
+-- ════════════════════════════════════════════════════════════════
+local function MakeSlider(label, unit, minVal, maxVal, defaultVal, cfgKey, order)
+    local Row = Instance.new("Frame")
+    Row.Size=UDim2.new(1,-12,0,52); Row.BackgroundColor3=C.bg2
+    Row.BorderSizePixel=0; Row.LayoutOrder=order; Row.Parent=Scroll
+    Instance.new("UICorner",Row).CornerRadius=UDim.new(0,10)
+
+    local Lbl = Instance.new("TextLabel")
+    Lbl.Size=UDim2.new(0.5,0,0,16); Lbl.Position=UDim2.new(0,12,0,8)
+    Lbl.BackgroundTransparency=1; Lbl.Font=Enum.Font.GothamBold
+    Lbl.Text=label; Lbl.TextColor3=C.txt2; Lbl.TextSize=10
+    Lbl.LetterSpacing=1; Lbl.TextXAlignment=Enum.TextXAlignment.Left
+    Lbl.ZIndex=13; Lbl.Parent=Row
+
+    local ValBox = Instance.new("TextButton")
+    ValBox.Size=UDim2.new(0,52,0,18); ValBox.Position=UDim2.new(1,-62,0,7)
+    ValBox.BackgroundColor3=C.bg0; ValBox.BorderSizePixel=0
+    ValBox.Font=Enum.Font.GothamBold
+    ValBox.Text=tostring(defaultVal).." "..unit; ValBox.TextColor3=C.accent
+    ValBox.TextSize=11; ValBox.AutoButtonColor=false; ValBox.ZIndex=14
+    ValBox.Parent=Row
+    Instance.new("UICorner",ValBox).CornerRadius=UDim.new(0,5)
+
+    -- Track
+    local TrackBg = Instance.new("Frame")
+    TrackBg.Size=UDim2.new(1,-24,0,4); TrackBg.Position=UDim2.new(0,12,0,32)
+    TrackBg.BackgroundColor3=C.railOff; TrackBg.BorderSizePixel=0; TrackBg.ZIndex=13
+    TrackBg.Parent=Row
+    Instance.new("UICorner",TrackBg).CornerRadius=UDim.new(1,0)
+
+    local TrackFill = Instance.new("Frame")
+    TrackFill.Size=UDim2.new((defaultVal-minVal)/(maxVal-minVal),0,1,0)
+    TrackFill.BackgroundColor3=C.accent; TrackFill.BorderSizePixel=0; TrackFill.ZIndex=14
+    TrackFill.Parent=TrackBg
+    Instance.new("UICorner",TrackFill).CornerRadius=UDim.new(1,0)
+
+    -- Knob slider
+    local SK = Instance.new("Frame")
+    local pct=(defaultVal-minVal)/(maxVal-minVal)
+    SK.Size=UDim2.new(0,14,0,14); SK.AnchorPoint=Vector2.new(0.5,0.5)
+    SK.Position=UDim2.new(pct,0,0.5,0); SK.BackgroundColor3=C.accent
+    SK.BorderSizePixel=0; SK.ZIndex=15; SK.Parent=TrackBg
+    Instance.new("UICorner",SK).CornerRadius=UDim.new(1,0)
+
+    -- Drag du slider
+    local sliderDragging=false
+    local function SetSliderVal(v)
+        v=math.clamp(math.floor(v+0.5), minVal, maxVal)
+        CFG[cfgKey]=v
+        local p=(v-minVal)/(maxVal-minVal)
+        TrackFill.Size=UDim2.new(p,0,1,0)
+        SK.Position=UDim2.new(p,0,0.5,0)
+        ValBox.Text=tostring(v).." "..unit
+        -- réappliquer si actif
+        if cfgKey=="WalkSpeed" and State.Speed then ApplySpeed() end
+        if cfgKey=="JumpPower" and State.JumpBoost then ApplyJump() end
+        if cfgKey=="FlySpeed" and State.Fly then end  -- appliqué en continu via heartbeat
+    end
+
+    SK.InputBegan:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.MouseButton1 then sliderDragging=true end
+    end)
+    Track(UserInputService.InputEnded:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.MouseButton1 then sliderDragging=false end
+    end))
+    Track(UserInputService.InputChanged:Connect(function(inp)
+        if sliderDragging and inp.UserInputType==Enum.UserInputType.MouseMovement then
+            local abs = TrackBg.AbsolutePosition
+            local w   = TrackBg.AbsoluteSize.X
+            local rel = (inp.Position.X - abs.X) / w
+            SetSliderVal(minVal + rel*(maxVal-minVal))
+        end
+    end))
+    TrackBg.InputBegan:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.MouseButton1 then
+            local abs=TrackBg.AbsolutePosition; local w=TrackBg.AbsoluteSize.X
+            local rel=(inp.Position.X-abs.X)/w
+            SetSliderVal(minVal+rel*(maxVal-minVal))
+        end
+    end)
+
+    Row.BackgroundTransparency=1
+    task.delay(0.1+order*0.055, function()
+        if Row and Row.Parent then
+            Tween(Row,TI(0.3,Enum.EasingStyle.Quad),{BackgroundTransparency=0})
+        end
+    end)
+end
+
+-- ════════════════════════════════════════════════════════════════
+--  CONSTRUCTION DU CONTENU
+-- ════════════════════════════════════════════════════════════════
+MakeSection("MOUVEMENTS", 1)
+MakeToggle("⚡","Speed Boost",   "WalkSpeed personnalisé",    "Speed",        2)
+MakeSlider("WALKSPEED","u/s",    16, 200, CFG.WalkSpeed,  "WalkSpeed",    3)
+MakeToggle("🦘","Jump Boost",    "JumpPower personnalisé",    "JumpBoost",    4)
+MakeSlider("JUMPPOWER","u",      50, 300, CFG.JumpPower,  "JumpPower",    5)
+MakeToggle("🕊","Fly Mode",      "ZQSD · Espace · Shift",     "Fly",          6)
+MakeSlider("FLY SPEED","u/s",    10, 200, CFG.FlySpeed,   "FlySpeed",     7)
+
+MakeSection("COMBAT & SURVIE", 8)
+MakeToggle("🛡","God Mode",      "HP forcée max (client)",    "GodMode",      9)
+MakeToggle("♾","Infinite Jump",  "Sauts illimités dans les airs","InfiniteJump",10)
+
+MakeSection("VISION", 11)
+MakeToggle("👁","ESP",           "Highlight joueurs à travers les murs","ESP",12)
+MakeToggle("🏷","Nametags",      "Noms flottants au-dessus des joueurs","Nametags",13)
+
+-- ── Footer ─────────────────────────────────────────────────────
+local Footer = Instance.new("Frame")
+Footer.Size=UDim2.new(1,0,0,24); Footer.Position=UDim2.new(0,0,1,-24)
+Footer.BackgroundColor3=C.bg0; Footer.BorderSizePixel=0; Footer.ZIndex=12
+Footer.Parent=Main
+Instance.new("UICorner",Footer).CornerRadius=UDim.new(0,14)
+local FootFix=Instance.new("Frame")
+FootFix.Size=UDim2.new(1,0,0,14); FootFix.BackgroundColor3=C.bg0
+FootFix.BorderSizePixel=0; FootFix.ZIndex=12; FootFix.Parent=Footer
+local FootTxt=Instance.new("TextLabel")
+FootTxt.Size=UDim2.new(1,0,1,0); FootTxt.BackgroundTransparency=1
+FootTxt.Font=Enum.Font.Gotham
+FootTxt.Text="[ V ] Afficher/Cacher  ·  [ ✕ ] Fermer & Reset"
+FootTxt.TextColor3=C.txt2; FootTxt.TextSize=9
+FootTxt.TextXAlignment=Enum.TextXAlignment.Center; FootTxt.ZIndex=13
+FootTxt.Parent=Footer
+
+-- ════════════════════════════════════════════════════════════════
+--  TOGGLE PANEL (bouton + touche V)
+-- ════════════════════════════════════════════════════════════════
+local panelOpen = false
+local PANEL_HEIGHT = 520  -- hauteur complète du panel
+
+local function OpenPanel()
+    panelOpen = true
+    Main.Visible = true
+    Main.Size = UDim2.new(0,320,0,0)
+    Tween(Main, TI(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+        {Size = UDim2.new(0,320,0,PANEL_HEIGHT)})
+    ToggleBtn.Text = "▴  ADMIN PANEL"
+    Tween(TBStroke, TI(0.2), {Transparency=0.1})
+end
+
+local function ClosePanel()
+    panelOpen = false
+    Tween(Main, TI(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.In),
+        {Size = UDim2.new(0,320,0,0)})
+    task.delay(0.38, function()
+        if not panelOpen then Main.Visible = false end
+    end)
+    ToggleBtn.Text = "▾  ADMIN PANEL"
+    Tween(TBStroke, TI(0.2), {Transparency=0.5})
+end
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    if not tbDrag then
+        if panelOpen then ClosePanel() else OpenPanel() end
+    end
+end)
+
+Track(UserInputService.InputBegan:Connect(function(inp, proc)
+    if not proc and inp.KeyCode==Enum.KeyCode.V then
+        if panelOpen then ClosePanel() else OpenPanel() end
+    end
+end))
+
+-- ── Log ────────────────────────────────────────────────────────
+print("╔══════════════════════════════════════╗")
+print("║   ADMIN PANEL v3 — Chargé !          ║")
+print("║  Joueur : "..LocalPlayer.Name)
+print("║  Appuyez sur V pour afficher/cacher  ║")
+print("║  Le panel est caché par défaut       ║")
+print("╚══════════════════════════════════════╝")

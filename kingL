@@ -1406,213 +1406,120 @@ Instance.new("UICorner", targetScroll).CornerRadius = UDim.new(0, 9)
 local tLayout = Instance.new("UIListLayout", targetScroll)
 tLayout.Padding = UDim.new(0, 3)
 tLayout.SortOrder = Enum.SortOrder.LayoutOrder
-local tPad = Instance.new("UIPadding", targetScroll)
-tPad.PaddingTop = UDim.new(0,5); tPad.PaddingLeft = UDim.new(0,5)
-tPad.PaddingRight = UDim.new(0,5); tPad.PaddingBottom = UDim.new(0,5)
 
-local selectedTargetLabel = Instance.new("TextLabel")
-selectedTargetLabel.Size = UDim2.new(1, 0, 0, 24)
-selectedTargetLabel.BackgroundTransparency = 1
-selectedTargetLabel.Font = Enum.Font.Gotham
-selectedTargetLabel.Text = "Cible : Aucune"
-selectedTargetLabel.TextColor3 = C.t2
-selectedTargetLabel.TextSize = 10
-selectedTargetLabel.LayoutOrder = 7
-selectedTargetLabel.Parent = farmPage
+-- Fonction pour créer un bouton cible
+local function CreateTargetButton(parent, name, isBoss)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, -6, 0, 26)
+	btn.BackgroundColor3 = isBoss and Color3.fromRGB(40, 20, 20) or C.card
+	btn.BorderSizePixel = 0
+	btn.Text = ""
+	btn.Parent = parent
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 
-local function RefreshTargetList()
-	for _, ch in ipairs(targetScroll:GetChildren()) do
-		if ch:IsA("TextButton") or ch:IsA("Frame") then ch:Destroy() end
-	end
-	local idx = 1
+	local txt = Instance.new("TextLabel")
+	txt.Size = UDim2.new(1, -10, 1, 0)
+	txt.Position = UDim2.new(0, 6, 0, 0)
+	txt.BackgroundTransparency = 1
+	txt.Font = Enum.Font.Gotham
+	txt.Text = (isBoss and "👑 " or "⚔ ") .. name
+	txt.TextColor3 = isBoss and C.red or C.t1
+	txt.TextSize = 11
+	txt.TextXAlignment = Enum.TextXAlignment.Left
+	txt.Parent = btn
 
-	-- Bosses
-	for _, entry in ipairs(GetBossNames()) do
-		local btn2 = Instance.new("TextButton")
-		btn2.Size = UDim2.new(1, 0, 0, 28)
-		btn2.BackgroundColor3 = Color3.fromRGB(30, 18, 8)
-		btn2.BorderSizePixel = 0
-		btn2.Font = Enum.Font.GothamBold
-		btn2.Text = "👑 " .. entry.name
-		btn2.TextColor3 = C.orange
-		btn2.TextSize = 10
-		btn2.LayoutOrder = idx
-		btn2.AutoButtonColor = false
-		btn2.Parent = targetScroll
-		Instance.new("UICorner", btn2).CornerRadius = UDim.new(0, 6)
-		btn2.MouseButton1Click:Connect(function()
-			FarmTargetName = entry.name
-			FarmTargetIsBoss = true
-			State.AutoFarmByLevel = false
-			selectedTargetLabel.Text = "Cible : 👑 " .. entry.name
-			selectedTargetLabel.TextColor3 = C.orange
-			Notify("Farm Cible", "Boss : " .. entry.name, "on")
-		end)
-		idx = idx + 1
-	end
-
-	-- Mobs
-	for _, entry in ipairs(GetMobNames()) do
-		local btn2 = Instance.new("TextButton")
-		btn2.Size = UDim2.new(1, 0, 0, 28)
-		btn2.BackgroundColor3 = C.card
-		btn2.BorderSizePixel = 0
-		btn2.Font = Enum.Font.Gotham
-		btn2.Text = "⚔ " .. entry.name
-		btn2.TextColor3 = C.t1
-		btn2.TextSize = 10
-		btn2.LayoutOrder = idx
-		btn2.AutoButtonColor = false
-		btn2.Parent = targetScroll
-		Instance.new("UICorner", btn2).CornerRadius = UDim.new(0, 6)
-		btn2.MouseButton1Click:Connect(function()
-			FarmTargetName = entry.name
-			FarmTargetIsBoss = false
-			State.AutoFarmByLevel = false
-			selectedTargetLabel.Text = "Cible : ⚔ " .. entry.name
-			selectedTargetLabel.TextColor3 = C.t1
-			Notify("Farm Cible", "Mob : " .. entry.name, "on")
-		end)
-		idx = idx + 1
-	end
-
-	if idx == 1 then
-		local noMob = Instance.new("TextLabel")
-		noMob.Size = UDim2.new(1,0,0,28); noMob.BackgroundTransparency = 1
-		noMob.Font = Enum.Font.Gotham; noMob.Text = "Aucun mob trouvé dans le workspace"
-		noMob.TextColor3 = C.t2; noMob.TextSize = 10; noMob.LayoutOrder = 1
-		noMob.Parent = targetScroll
-	end
+	btn.MouseButton1Click:Connect(function()
+		FarmTargetName = name
+		FarmTargetIsBoss = isBoss
+		UpdateFarmStatus("🎯 Cible: " .. name)
+	end)
 end
 
--- Bouton rafraîchir
-local refreshBtn = Instance.new("TextButton")
-refreshBtn.Size = UDim2.new(1, 0, 0, 28)
-refreshBtn.BackgroundColor3 = C.surface
-refreshBtn.BorderSizePixel = 0
-refreshBtn.Font = Enum.Font.GothamBold
-refreshBtn.Text = "↺  Actualiser la liste"
-refreshBtn.TextColor3 = C.cyan
-refreshBtn.TextSize = 11
-refreshBtn.LayoutOrder = 8
-refreshBtn.AutoButtonColor = false
-refreshBtn.Parent = farmPage
-Instance.new("UICorner", refreshBtn).CornerRadius = UDim.new(0, 8)
-refreshBtn.MouseEnter:Connect(function() Tw(refreshBtn, TI(0.1), {BackgroundColor3 = C.hover}) end)
-refreshBtn.MouseLeave:Connect(function() Tw(refreshBtn, TI(0.1), {BackgroundColor3 = C.surface}) end)
-refreshBtn.MouseButton1Click:Connect(function()
-	RefreshTargetList()
-	Notify("Liste", "Mobs/Boss actualisés", "on")
-end)
+-- Refresh liste mobs/boss
+local function RefreshTargetList()
+	for _, c in ipairs(targetScroll:GetChildren()) do
+		if c:IsA("TextButton") then c:Destroy() end
+	end
+
+	for _, mob in ipairs(GetMobNames()) do
+		CreateTargetButton(targetScroll, mob.name, false)
+	end
+
+	for _, boss in ipairs(GetBossNames()) do
+		CreateTargetButton(targetScroll, boss.name, true)
+	end
+end
 
 RefreshTargetList()
 
--- ── ONGLET 2 : MOUVEMENT ─────────────────────────────────────────────
-local movePage, _ = AddTab("move", "🏃", "Mvt", C.blue)
-MakeSection(movePage, 1, "DÉPLACEMENT")
-MakeToggle(movePage, 2,  "Speed",       "Speed Hack",    "WalkSpeed " .. CFG.WalkSpeed, C.blue)
-MakeToggle(movePage, 3,  "JumpBoost",   "Jump Boost",    "JumpPower " .. CFG.JumpPower, C.cyan)
-MakeToggle(movePage, 4,  "Fly",         "Fly Mode",      "ZQSD · Espace · Shift",        C.cyan)
-MakeToggle(movePage, 5,  "InfiniteJump","Infinite Jump", "Sauts illimités",              C.purple)
-MakeToggle(movePage, 6,  "NoClip",      "No Clip",       "Traverse les murs",            C.pink)
-MakeToggle(movePage, 7,  "LowGravity",  "Low Gravity",   "Gravité réduite",              C.cyan)
-MakeToggle(movePage, 8,  "BunnyHop",    "Bunny Hop",     "Sauts continus automatiques",  C.blue)
-MakeToggle(movePage, 9,  "AutoJump",    "Auto Jump",     "Sauter dès que possible",      C.blue)
-MakeSection(movePage, 10, "TÉLÉPORTATION")
-MakeToggle(movePage, 11, "ClickTP",     "Click TP",      "Clic droit → téléporter",      C.orange)
+-- Bouton refresh
+local refreshBtn = Instance.new("TextButton")
+refreshBtn.Size = UDim2.new(1, 0, 0, 28)
+refreshBtn.BackgroundColor3 = C.blue
+refreshBtn.Text = "🔄 Rafraîchir"
+refreshBtn.TextColor3 = Color3.new(1,1,1)
+refreshBtn.Font = Enum.Font.GothamBold
+refreshBtn.TextSize = 11
+refreshBtn.BorderSizePixel = 0
+refreshBtn.LayoutOrder = 7
+refreshBtn.Parent = farmPage
+Instance.new("UICorner", refreshBtn).CornerRadius = UDim.new(0, 6)
 
--- ── ONGLET 3 : COMBAT ────────────────────────────────────────────────
-local combatPage, _ = AddTab("combat", "⚡", "Combat", C.red)
-MakeSection(combatPage, 1, "SURVIE")
-MakeToggle(combatPage, 2,  "GodMode",    "God Mode",       "HP bloquée au maximum",      C.green)
-MakeToggle(combatPage, 3,  "AutoRespawn","Auto Respawn",   "Réapparition automatique",   C.green)
-MakeSection(combatPage, 4, "AVANTAGES")
-MakeToggle(combatPage, 5,  "Hitbox",     "Hitbox Expander","Agrandit les hitboxes",       C.red)
-MakeToggle(combatPage, 6,  "Ghost",      "Ghost Mode",     "Semi-invisible + no collide", C.purple)
-MakeToggle(combatPage, 7,  "Invisible",  "Invisible",      "100% invisible",              C.purple)
-MakeToggle(combatPage, 8,  "Headless",   "Headless",       "Tête invisible",              C.pink)
-
--- ── ONGLET 4 : VISUEL ────────────────────────────────────────────────
-local visualPage, _ = AddTab("visual", "👁", "Visuel", C.cyan)
-MakeSection(visualPage, 1, "ESP")
-MakeToggle(visualPage, 2,  "ESP",        "ESP",            "Contours joueurs",            C.cyan)
-MakeToggle(visualPage, 3,  "RainbowESP", "Rainbow ESP",    "Couleurs arc-en-ciel",        C.pink)
-MakeToggle(visualPage, 4,  "Tracers",    "Tracers",        "Lignes vers joueurs",         C.cyan)
-MakeToggle(visualPage, 5,  "Nametags",   "Nametags",       "Tags au-dessus des joueurs",  C.blue)
-MakeSection(visualPage, 6, "ÉCLAIRAGE")
-MakeToggle(visualPage, 7,  "FullBright", "FullBright",     "Éclairage maximal",           C.yellow)
-MakeToggle(visualPage, 8,  "FogRemover", "Fog Remover",    "Supprime le brouillard",      C.cyan)
-MakeToggle(visualPage, 9,  "NightMode",  "Night Mode",     "Ambiance nuit",               C.purple)
-MakeToggle(visualPage, 10, "TimeFreeze", "Time Freeze",    "Fige l'heure du jour",        C.orange)
-MakeSection(visualPage, 11, "CAMÉRA")
-MakeToggle(visualPage, 12, "FreeCam",    "Free Camera",    "ZQSD · E · Ctrl",             C.blue)
-MakeToggle(visualPage, 13, "ThirdPerson","Third Person",   "Vue à la 3ème personne",      C.blue)
-
--- ── ONGLET 5 : DIVERS ────────────────────────────────────────────────
-local miscPage, _ = AddTab("misc", "⚙", "Divers", C.t3)
-MakeSection(miscPage, 1, "UTILITAIRE")
-MakeToggle(miscPage, 2,  "AntiAFK",     "Anti-AFK",       "Empêche la déco AFK",         C.green)
-MakeToggle(miscPage, 3,  "ChatSpy",     "Chat Spy",       "Voir tous les messages",       C.orange)
-MakeToggle(miscPage, 4,  "Spin",        "Spin",           "Rotation automatique",         C.pink)
-MakeToggle(miscPage, 5,  "NotifEnabled","Notifications",  "Activer/désactiver les notifs",C.blue)
-
--- Bouton Reset All
-local resetBtn = Instance.new("TextButton")
-resetBtn.Size = UDim2.new(1, 0, 0, 36)
-resetBtn.BackgroundColor3 = Color3.fromRGB(40, 10, 14)
-resetBtn.BorderSizePixel = 0
-resetBtn.Font = Enum.Font.GothamBold
-resetBtn.Text = "⚠  RESET TOUT"
-resetBtn.TextColor3 = C.red
-resetBtn.TextSize = 12
-resetBtn.LayoutOrder = 10
-resetBtn.AutoButtonColor = false
-resetBtn.Parent = miscPage
-Instance.new("UICorner", resetBtn).CornerRadius = UDim.new(0, 9)
-local resetStr = Instance.new("UIStroke", resetBtn)
-resetStr.Color = C.red; resetStr.Thickness = 1; resetStr.Transparency = 0.5
-resetBtn.MouseEnter:Connect(function() Tw(resetBtn, TI(0.1), {BackgroundColor3 = Color3.fromRGB(70, 12, 18)}) end)
-resetBtn.MouseLeave:Connect(function() Tw(resetBtn, TI(0.1), {BackgroundColor3 = Color3.fromRGB(40, 10, 14)}) end)
-resetBtn.MouseButton1Click:Connect(function()
-	FullCleanup()
-	SGui:Destroy()
-	Notify("Reset", "Panel fermé, tout désactivé", "off")
+refreshBtn.MouseButton1Click:Connect(function()
+	RefreshTargetList()
+	Notify("Liste", "Mobs/Boss mis à jour", "on")
 end)
 
 -- ══════════════════════════════════════════════════════════════════════
---  TOGGLE VISIBILITÉ PANEL  (touche G)
+--  AUTRES ONGLETS (minimal pour stabilité)
 -- ══════════════════════════════════════════════════════════════════════
-local panelOpen = false
 
-local function TogglePanel()
-	panelOpen = not panelOpen
-	if panelOpen then
-		Main.Size = UDim2.new(0, TOTAL_W, 0, 0)
-		Main.Visible = true
-		Tw(Main, TI(0.35, Enum.EasingStyle.Back), {Size = UDim2.new(0, TOTAL_W, 0, PANEL_H)})
-		if not CurrentTab then SwitchTab("farm") end
-		Tw(TArrow, TI(0.2), {TextColor3 = C.green})
+local playerPage = AddTab("player", "👤", "Player", C.blue)
+MakeSection(playerPage, 1, "MOUVEMENT")
+MakeToggle(playerPage, 2, "Speed", "Speed", "Augmente la vitesse", C.blue)
+MakeToggle(playerPage, 3, "JumpBoost", "Jump Boost", "Saut amélioré", C.cyan)
+MakeToggle(playerPage, 4, "Fly", "Fly", "Vol libre", C.purple)
+
+local combatPage = AddTab("combat", "⚡", "Combat", C.red)
+MakeSection(combatPage, 1, "COMBAT")
+MakeToggle(combatPage, 2, "Hitbox", "Hitbox", "Agrandit les ennemis", C.red)
+MakeToggle(combatPage, 3, "Tracers", "Tracers", "Lignes vers joueurs", C.orange)
+
+local visualPage = AddTab("visual", "👁", "Visual", C.green)
+MakeSection(visualPage, 1, "VISUEL")
+MakeToggle(visualPage, 2, "ESP", "ESP", "Voir les joueurs", C.green)
+MakeToggle(visualPage, 3, "FullBright", "FullBright", "Luminosité max", C.yellow)
+
+-- ══════════════════════════════════════════════════════════════════════
+--  TOGGLE UI (G + bouton)
+-- ══════════════════════════════════════════════════════════════════════
+
+local isOpen = false
+
+local function ToggleUI()
+	isOpen = not isOpen
+	Main.Visible = true
+	if isOpen then
+		Tw(Main, TI(0.3, Enum.EasingStyle.Back), {Size = UDim2.new(0, TOTAL_W, 0, PANEL_H)})
 	else
-		Tw(Main, TI(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Size = UDim2.new(0, TOTAL_W, 0, 0)})
-		task.wait(0.32)
-		Main.Visible = false
-		Tw(TArrow, TI(0.2), {TextColor3 = C.gold})
+		Tw(Main, TI(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In),
+			{Size = UDim2.new(0, TOTAL_W, 0, 0)})
+		task.delay(0.3, function()
+			if not isOpen then Main.Visible = false end
+		end)
 	end
 end
 
--- Clic sur TBtn
-TBtnClick.MouseButton1Click:Connect(function()
-	if not tbDrag then TogglePanel() end
+TBtnClick.MouseButton1Click:Connect(ToggleUI)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+	if not gp and input.KeyCode == Enum.KeyCode.G then
+		ToggleUI()
+	end
 end)
 
--- Touche G
-Track(UserInputService.InputBegan:Connect(function(inp, proc)
-	if proc then return end
-	if inp.KeyCode == Enum.KeyCode.G then TogglePanel() end
-end))
+-- Ouvre sur le premier onglet
+task.wait()
+SwitchTab("farm")
 
--- ══════════════════════════════════════════════════════════════════════
---  INIT
--- ══════════════════════════════════════════════════════════════════════
-Notify("Admin Panel v7", "Prêt · Touche G pour ouvrir", "on")
-UpdateBadge()
+Notify("Admin Panel v7", "Chargé avec succès", "on")

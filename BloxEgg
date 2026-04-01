@@ -9,6 +9,21 @@ local player = Players.LocalPlayer
 local ESP_ENABLED = true
 
 --------------------------------------------------
+-- 🔊 Sons
+--------------------------------------------------
+local function playSound(id)
+    local sound = Instance.new("Sound")
+    sound.SoundId = "rbxassetid://" .. id
+    sound.Volume = 1
+    sound.Parent = workspace
+    sound:Play()
+
+    sound.Ended:Connect(function()
+        sound:Destroy()
+    end)
+end
+
+--------------------------------------------------
 -- 🔔 Notification
 --------------------------------------------------
 local function notify(text)
@@ -50,6 +65,9 @@ button.Parent = frame
 button.MouseButton1Click:Connect(function()
     ESP_ENABLED = not ESP_ENABLED
 
+    -- 🔊 son ON/OFF
+    playSound(130017098772572)
+
     if ESP_ENABLED then
         button.Text = "ESP : ON"
         button.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
@@ -60,7 +78,6 @@ button.MouseButton1Click:Connect(function()
         notify("ESP désactivé")
     end
 
-    -- cacher / afficher tous les ESP existants
     for _, obj in pairs(Workspace:GetDescendants()) do
         if obj:IsA("Highlight") and obj.Name == "EggESP" then
             obj.Enabled = ESP_ENABLED
@@ -104,7 +121,9 @@ local function createESP(model, part)
     text.Font = Enum.Font.SourceSansBold
     text.Parent = billboard
 
+    -- 🔔 notif + son egg
     notify("Egg trouvé !")
+    playSound(134258698978398)
 
     RunService.RenderStepped:Connect(function()
         if not part or not part.Parent then return end

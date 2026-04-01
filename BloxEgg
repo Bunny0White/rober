@@ -4,22 +4,32 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
+local SoundService = game:GetService("SoundService")
+local ContentProvider = game:GetService("ContentProvider")
 
 local player = Players.LocalPlayer
 local ESP_ENABLED = true
 
 --------------------------------------------------
--- 🔊 Sons
+-- 🔊 Sons FIX
 --------------------------------------------------
 local function playSound(id)
     local sound = Instance.new("Sound")
     sound.SoundId = "rbxassetid://" .. id
     sound.Volume = 1
-    sound.Parent = workspace
-    sound:Play()
+    sound.Parent = SoundService
 
-    sound.Ended:Connect(function()
-        sound:Destroy()
+    -- preload (important)
+    pcall(function()
+        ContentProvider:PreloadAsync({sound})
+    end)
+
+    SoundService:PlayLocalSound(sound)
+
+    task.delay(3, function()
+        if sound then
+            sound:Destroy()
+        end
     end)
 end
 
@@ -125,6 +135,7 @@ local function createESP(model, part)
     notify("Egg trouvé !")
     playSound(134258698978398)
 
+    -- 🔄 distance
     RunService.RenderStepped:Connect(function()
         if not part or not part.Parent then return end
         if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
@@ -149,12 +160,12 @@ local function checkModel(model)
     createESP(model, part)
 end
 
--- Scan initial
+-- 🔹 Scan initial
 for _, obj in pairs(Workspace:GetDescendants()) do
     checkModel(obj)
 end
 
--- Temps réel
+-- 🔹 Temps réel
 Workspace.DescendantAdded:Connect(function(obj)
     checkModel(obj)
 end)

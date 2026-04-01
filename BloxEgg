@@ -1,0 +1,86 @@
+-- LocalScript (StarterPlayerScripts)
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local StarterGui = game:GetService("StarterGui")
+
+local player = Players.LocalPlayer
+
+local function notify(text)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "Egg détecté 🥚",
+            Text = text,
+            Duration = 5
+        })
+    end)
+end
+
+local function createESP(model, part)
+    if model:FindFirstChild("EggESP") then return end
+
+    -- 🔹 Highlight
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "EggESP"
+    highlight.FillColor = Color3.fromRGB(0, 255, 0)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.5
+    highlight.Parent = model
+    highlight.Adornee = model
+
+    -- 🔹 Billboard
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESPLabel"
+    billboard.Adornee = part
+    billboard.Size = UDim2.new(0, 150, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = part
+
+    local text = Instance.new("TextLabel")
+    text.Size = UDim2.new(1, 0, 1, 0)
+    text.BackgroundTransparency = 1
+    text.TextColor3 = Color3.fromRGB(255, 255, 255)
+    text.TextStrokeTransparency = 0
+    text.TextScaled = true
+    text.Font = Enum.Font.SourceSansBold
+    text.Parent = billboard
+
+    -- 🔹 Notification
+    notify("Un nouvel egg a été trouvé !")
+
+    -- 🔹 Update distance
+    RunService.RenderStepped:Connect(function()
+        if not part or not part.Parent then return end
+        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+
+        local hrp = player.Character.HumanoidRootPart
+        local distance = (hrp.Position - part.Position).Magnitude
+
+        text.Text = "Egg\n" .. math.floor(distance) .. " studs"
+    end)
+
+    print("ESP + notif :", model:GetFullName())
+end
+
+local function checkModel(model)
+    if not model:IsA("Model") then return end
+
+    if model.Name ~= "" and model.Name ~= "Model" then return end
+
+    local part = model:FindFirstChild("_PrimaryPart")
+    if not part or not part:IsA("BasePart") then return end
+
+    createESP(model, part)
+end
+
+-- 🔹 Scan initial
+for _, obj in pairs(Workspace:GetDescendants()) do
+    checkModel(obj)
+end
+
+-- 🔹 Détection en temps réel
+Workspace.DescendantAdded:Connect(function(obj)
+    checkModel(obj)
+end)

@@ -1,6 +1,6 @@
 -- ╔══════════════════════════════════════════════════════════════════════╗
 -- ║          ADMIN PANEL v5  —  DASHBOARD EDITION                       ║
--- ║  StarterPlayerScripts  |  V pour toggle  |  Caché par défaut        ║
+-- ║  StarterPlayerScripts  |  G pour toggle  |  Caché par défaut        ║
 -- ╚══════════════════════════════════════════════════════════════════════╝
 
 local Players          = game:GetService("Players")
@@ -1478,13 +1478,14 @@ TBtnClick.MouseButton1Click:Connect(function()
 end)
 
 Track(UserInputService.InputBegan:Connect(function(inp, proc)
-	if not proc and inp.KeyCode == Enum.KeyCode.V then
+	if not proc and inp.KeyCode == Enum.KeyCode.G then
 		if panelOpen then ClosePanel() else OpenPanel() end
+		print("Touche G pressée !")
 	end
 end))
 
 print("╔══════════════════════════════════════════════╗")
 print("║   ADMIN PANEL v5 — Dashboard Edition !      ║")
-print("║   Joueur  : "..LocalPlayer.Name)
-print("║   [ V ] pour afficher / cacher le panel     ║")
+print("║   Joueur  : "..LocalPlayer.Name.."             ║")
+print("║   [ G ] pour afficher / cacher le panel     ║")
 print("╚══════════════════════════════════════════════╝")

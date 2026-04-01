@@ -677,8 +677,8 @@ local function ToggleNoClip(on)
 	else
 		local c = Char()
 		if c then for _, p in ipairs(c:GetDescendants()) do
-			if p:IsA("BasePart") then p.CanCollide = true end
-		end end
+				if p:IsA("BasePart") then p.CanCollide = true end
+			end end
 		Notify("NoClip", "Collisions restaurées", "off")
 	end
 end
@@ -995,6 +995,8 @@ SBLine.Size = UDim2.new(0, 1, 1, 0); SBLine.Position = UDim2.new(1, -1, 0, 0)
 SBLine.BackgroundColor3 = C.sep; SBLine.BorderSizePixel = 0; SBLine.ZIndex = 13; SBLine.Parent = Sidebar
 
 local SBLayout = Instance.new("UIListLayout", Sidebar)
+SBLayout.Name = "SBLayout"
+SBLayout.Wraps = true
 SBLayout.Padding = UDim.new(0, 4); SBLayout.SortOrder = Enum.SortOrder.LayoutOrder
 SBLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 SBLayout.VerticalAlignment = Enum.VerticalAlignment.Top

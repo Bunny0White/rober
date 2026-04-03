@@ -1,0 +1,119 @@
+tLayout.Padding = UDim.new(0, 3)
+tLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+-- Fonction pour créer un bouton cible
+local function CreateTargetButton(parent, name, isBoss)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, -6, 0, 26)
+	btn.BackgroundColor3 = isBoss and Color3.fromRGB(40, 20, 20) or C.card
+	btn.BorderSizePixel = 0
+	btn.Text = ""
+	btn.Parent = parent
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+	local txt = Instance.new("TextLabel")
+	txt.Size = UDim2.new(1, -10, 1, 0)
+	txt.Position = UDim2.new(0, 6, 0, 0)
+	txt.BackgroundTransparency = 1
+	txt.Font = Enum.Font.Gotham
+	txt.Text = (isBoss and "👑 " or "⚔ ") .. name
+	txt.TextColor3 = isBoss and C.red or C.t1
+	txt.TextSize = 11
+	txt.TextXAlignment = Enum.TextXAlignment.Left
+	txt.Parent = btn
+
+	btn.MouseButton1Click:Connect(function()
+		FarmTargetName = name
+		FarmTargetIsBoss = isBoss
+		UpdateFarmStatus("🎯 Cible: " .. name)
+	end)
+end
+
+-- Refresh liste mobs/boss
+local function RefreshTargetList()
+	for _, c in ipairs(targetScroll:GetChildren()) do
+		if c:IsA("TextButton") then c:Destroy() end
+	end
+
+	for _, mob in ipairs(GetMobNames()) do
+		CreateTargetButton(targetScroll, mob.name, false)
+	end
+
+	for _, boss in ipairs(GetBossNames()) do
+		CreateTargetButton(targetScroll, boss.name, true)
+	end
+end
+
+RefreshTargetList()
+
+-- Bouton refresh
+local refreshBtn = Instance.new("TextButton")
+refreshBtn.Size = UDim2.new(1, 0, 0, 28)
+refreshBtn.BackgroundColor3 = C.blue
+refreshBtn.Text = "🔄 Rafraîchir"
+refreshBtn.TextColor3 = Color3.new(1,1,1)
+refreshBtn.Font = Enum.Font.GothamBold
+refreshBtn.TextSize = 11
+refreshBtn.BorderSizePixel = 0
+refreshBtn.LayoutOrder = 7
+refreshBtn.Parent = farmPage
+Instance.new("UICorner", refreshBtn).CornerRadius = UDim.new(0, 6)
+
+refreshBtn.MouseButton1Click:Connect(function()
+	RefreshTargetList()
+	Notify("Liste", "Mobs/Boss mis à jour", "on")
+end)
+
+-- ══════════════════════════════════════════════════════════════════════
+--  AUTRES ONGLETS (minimal pour stabilité)
+-- ══════════════════════════════════════════════════════════════════════
+
+local playerPage = AddTab("player", "👤", "Player", C.blue)
+MakeSection(playerPage, 1, "MOUVEMENT")
+MakeToggle(playerPage, 2, "Speed", "Speed", "Augmente la vitesse", C.blue)
+MakeToggle(playerPage, 3, "JumpBoost", "Jump Boost", "Saut amélioré", C.cyan)
+MakeToggle(playerPage, 4, "Fly", "Fly", "Vol libre", C.purple)
+
+local combatPage = AddTab("combat", "⚡", "Combat", C.red)
+MakeSection(combatPage, 1, "COMBAT")
+MakeToggle(combatPage, 2, "Hitbox", "Hitbox", "Agrandit les ennemis", C.red)
+MakeToggle(combatPage, 3, "Tracers", "Tracers", "Lignes vers joueurs", C.orange)
+
+local visualPage = AddTab("visual", "👁", "Visual", C.green)
+MakeSection(visualPage, 1, "VISUEL")
+MakeToggle(visualPage, 2, "ESP", "ESP", "Voir les joueurs", C.green)
+MakeToggle(visualPage, 3, "FullBright", "FullBright", "Luminosité max", C.yellow)
+
+-- ══════════════════════════════════════════════════════════════════════
+--  TOGGLE UI (G + bouton)
+-- ══════════════════════════════════════════════════════════════════════
+
+local isOpen = false
+
+local function ToggleUI()
+	isOpen = not isOpen
+	Main.Visible = true
+	if isOpen then
+		Tw(Main, TI(0.3, Enum.EasingStyle.Back), {Size = UDim2.new(0, TOTAL_W, 0, PANEL_H)})
+	else
+		Tw(Main, TI(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In),
+			{Size = UDim2.new(0, TOTAL_W, 0, 0)})
+		task.delay(0.3, function()
+			if not isOpen then Main.Visible = false end
+		end)
+	end
+end
+
+TBtnClick.MouseButton1Click:Connect(ToggleUI)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+	if not gp and input.KeyCode == Enum.KeyCode.G then
+		ToggleUI()
+	end
+end)
+
+-- Ouvre sur le premier onglet
+task.wait()
+SwitchTab("farm")
+
+Notify("Admin Panel v7", "Chargé avec succès", "on")

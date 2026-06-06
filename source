@@ -97,6 +97,14 @@ local FreeCamPart                    = nil
 local TracerLines                    = {}
 local HitboxOrigSizes                = {}
 
+-- ══ ESP : connexions dédiées pour auto-update ══
+local ESPConnections = {}
+local function ClearESPConnections()
+	for _, c in ipairs(ESPConnections) do pcall(function() c:Disconnect() end) end
+	ESPConnections = {}
+end
+local function TrackESP(c) table.insert(ESPConnections, c) return c end
+
 local OrigLighting = {
 	Brightness     = Lighting.Brightness,
 	ClockTime      = Lighting.ClockTime,
@@ -152,7 +160,7 @@ local C = {
 	sep      = Color3.fromRGB( 20,  24,  44),
 }
 
--- DIMENSIONS — sidebar à GAUCHE
+-- DIMENSIONS
 local SIDEBAR_W = 58
 local PANEL_W   = 500
 local PANEL_H   = 520
@@ -241,8 +249,15 @@ local function FullCleanup()
 	for _, ref in ipairs(allConns) do
 		if ref then pcall(function() ref:Disconnect() end) end
 	end
-	if FlyBV then FlyBV:Destroy() FlyBV = nil end
-	if FlyBG then FlyBG:Destroy() FlyBG = nil end
+	ClearESPConnections()
+	-- Nettoie l'attachment et les contraintes du fly
+	local r = Root()
+	if r then
+		local att = r:FindFirstChild("__APflyAtt")
+		if att then att:Destroy() end
+	end
+	if FlyBV then pcall(function() FlyBV:Destroy() end); FlyBV = nil end
+	if FlyBG then pcall(function() FlyBG:Destroy() end); FlyBG = nil end
 	if FreeCamPart then FreeCamPart:Destroy() FreeCamPart = nil end
 	for _, line in pairs(TracerLines) do pcall(function() line:Destroy() end) end
 	TracerLines = {}
@@ -285,23 +300,50 @@ end
 --  FEATURES
 -- ══════════════════════════════════════════════════════════════════════
 
+-- ══ ESP CORRIGÉ : auto-update nouveaux joueurs + respawns ══
 local function ApplyESP(p)
 	if p == LocalPlayer then return end
-	local c = p.Character; if not c or c:FindFirstChild("__APesp") then return end
+	local c = p.Character
+	if not c or c:FindFirstChild("__APesp") then return end
 	local hl = Instance.new("Highlight")
-	hl.Name = "__APesp"; hl.FillColor = CFG.ESPFill; hl.OutlineColor = CFG.ESPOutline
-	hl.FillTransparency = 0.5; hl.OutlineTransparency = 0
-	hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; hl.Parent = c
+	hl.Name = "__APesp"
+	hl.FillColor = CFG.ESPFill
+	hl.OutlineColor = CFG.ESPOutline
+	hl.FillTransparency = 0.5
+	hl.OutlineTransparency = 0
+	hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	hl.Parent = c
 end
+
 local function RemoveESP(p)
 	local c = p.Character; if not c then return end
 	local hl = c:FindFirstChild("__APesp"); if hl then hl:Destroy() end
 end
+
 local function ToggleESP(on)
+	ClearESPConnections()
 	if on then
-		for _, p in ipairs(Players:GetPlayers()) do ApplyESP(p) end
-		Track(Players.PlayerAdded:Connect(function(p)
-			Track(p.CharacterAdded:Connect(function() task.wait(0.4); if State.ESP then ApplyESP(p) end end))
+		-- Applique sur tous les joueurs déjà présents + écoute leurs respawns
+		for _, p in ipairs(Players:GetPlayers()) do
+			ApplyESP(p)
+			TrackESP(p.CharacterAdded:Connect(function()
+				if not State.ESP then return end
+				task.wait(0.4)
+				ApplyESP(p)
+			end))
+		end
+		-- Écoute les nouveaux joueurs qui rejoignent
+		TrackESP(Players.PlayerAdded:Connect(function(p)
+			ApplyESP(p)
+			TrackESP(p.CharacterAdded:Connect(function()
+				if not State.ESP then return end
+				task.wait(0.4)
+				ApplyESP(p)
+			end))
+		end))
+		-- Nettoie quand un joueur part
+		TrackESP(Players.PlayerRemoving:Connect(function(p)
+			RemoveESP(p)
 		end))
 		Notify("ESP", "Joueurs mis en évidence", "on")
 	else
@@ -416,32 +458,64 @@ local function ToggleLowGravity(on)
 	else workspace.Gravity = OrigGravity; Notify("Low Gravity", "Gravité restaurée", "off") end
 end
 
+-- ══ FLY CORRIGÉ : LinearVelocity + AlignOrientation (local, API moderne) ══
 local function StartFly()
-	local r = Root(); local h = Hum(); if not r or not h then return end
+	local r = Root(); local h = Hum()
+	if not r or not h then return end
 	h.PlatformStand = true
-	FlyBV = Instance.new("BodyVelocity"); FlyBV.MaxForce = Vector3.new(1e5,1e5,1e5); FlyBV.Parent = r
-	FlyBG = Instance.new("BodyGyro"); FlyBG.MaxTorque = Vector3.new(1e5,1e5,1e5)
-	FlyBG.CFrame = r.CFrame; FlyBG.P = 1e4; FlyBG.Parent = r
+
+	-- Attachment racine
+	local att = Instance.new("Attachment")
+	att.Name = "__APflyAtt"
+	att.Parent = r
+
+	-- LinearVelocity remplace BodyVelocity
+	FlyBV = Instance.new("LinearVelocity")
+	FlyBV.Name = "__APflyLV"
+	FlyBV.Attachment0 = att
+	FlyBV.MaxForce = 1e5
+	FlyBV.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+	FlyBV.RelativeTo = Enum.ActuatorRelativeTo.World
+	FlyBV.VectorVelocity = Vector3.zero
+	FlyBV.Parent = r
+
+	-- AlignOrientation remplace BodyGyro
+	FlyBG = Instance.new("AlignOrientation")
+	FlyBG.Name = "__APflyAO"
+	FlyBG.Attachment0 = att
+	FlyBG.Responsiveness = 50
+	FlyBG.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	FlyBG.Parent = r
+
 	local cam = workspace.CurrentCamera
 	FlyConn = RunService.Heartbeat:Connect(function()
-		if not State.Fly or not FlyBV then return end
-		local d = Vector3.zero; local UIS = UserInputService
+		if not State.Fly or not FlyBV or not FlyBV.Parent then return end
+		local d = Vector3.zero
+		local UIS = UserInputService
 		if UIS:IsKeyDown(Enum.KeyCode.W) or UIS:IsKeyDown(Enum.KeyCode.Z) then d = d + cam.CFrame.LookVector  end
 		if UIS:IsKeyDown(Enum.KeyCode.S)                                   then d = d - cam.CFrame.LookVector  end
 		if UIS:IsKeyDown(Enum.KeyCode.A) or UIS:IsKeyDown(Enum.KeyCode.Q) then d = d - cam.CFrame.RightVector end
 		if UIS:IsKeyDown(Enum.KeyCode.D)                                   then d = d + cam.CFrame.RightVector end
 		if UIS:IsKeyDown(Enum.KeyCode.Space)     then d = d + Vector3.yAxis end
 		if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then d = d - Vector3.yAxis end
-		FlyBV.Velocity = (d.Magnitude > 0 and d.Unit or Vector3.zero) * CFG.FlySpeed
-		FlyBG.CFrame   = cam.CFrame
+		FlyBV.VectorVelocity = (d.Magnitude > 0 and d.Unit or Vector3.zero) * CFG.FlySpeed
+		FlyBG.CFrame = cam.CFrame
 	end)
 end
+
 local function StopFly()
 	if FlyConn then FlyConn:Disconnect(); FlyConn = nil end
-	if FlyBV   then FlyBV:Destroy();   FlyBV = nil end
-	if FlyBG   then FlyBG:Destroy();   FlyBG = nil end
+	-- Supprime l'attachment (détruit aussi les contraintes enfants)
+	local r = Root()
+	if r then
+		local att = r:FindFirstChild("__APflyAtt")
+		if att then att:Destroy() end
+	end
+	if FlyBV and FlyBV.Parent then FlyBV:Destroy() end; FlyBV = nil
+	if FlyBG and FlyBG.Parent then FlyBG:Destroy() end; FlyBG = nil
 	local h = Hum(); if h then h.PlatformStand = false end
 end
+
 local function ToggleFly(on)
 	if on then StartFly(); Notify("Fly Mode", "ZQSD · Espace · Shift", "on")
 	else StopFly(); Notify("Fly Mode", "Désactivé", "off") end
@@ -921,11 +995,10 @@ MainStr.Color = C.blue; MainStr.Thickness = 1; MainStr.Transparency = 0.6
 local Sidebar = Instance.new("Frame")
 Sidebar.Name = "Sidebar"
 Sidebar.Size = UDim2.new(0, SIDEBAR_W, 1, 0)
-Sidebar.Position = UDim2.new(0, 0, 0, 0)   -- ← GAUCHE
+Sidebar.Position = UDim2.new(0, 0, 0, 0)
 Sidebar.BackgroundColor3 = C.sidebar; Sidebar.BorderSizePixel = 0
 Sidebar.ZIndex = 12; Sidebar.Parent = Main
 
--- Ligne séparation DROITE de la sidebar
 local SBLine = Instance.new("Frame")
 SBLine.Size = UDim2.new(0, 1, 1, 0); SBLine.Position = UDim2.new(1, -1, 0, 0)
 SBLine.BackgroundColor3 = C.sep; SBLine.BorderSizePixel = 0; SBLine.ZIndex = 13; SBLine.Parent = Sidebar
@@ -940,11 +1013,11 @@ SBLayout.VerticalAlignment = Enum.VerticalAlignment.Top
 local SBPad = Instance.new("UIPadding", Sidebar)
 SBPad.PaddingTop = UDim.new(0, 10)
 
--- ══ ZONE CONTENU (DROITE de la sidebar) ══════════════════════════════
+-- ══ ZONE CONTENU ══════════════════════════════════════════════════════
 local ContentArea = Instance.new("Frame")
 ContentArea.Name = "ContentArea"
 ContentArea.Size = UDim2.new(0, PANEL_W, 1, 0)
-ContentArea.Position = UDim2.new(0, SIDEBAR_W, 0, 0)  -- ← décalée à droite
+ContentArea.Position = UDim2.new(0, SIDEBAR_W, 0, 0)
 ContentArea.BackgroundColor3 = C.shell; ContentArea.BorderSizePixel = 0
 ContentArea.ClipsDescendants = true; ContentArea.ZIndex = 11; ContentArea.Parent = Main
 
@@ -1060,13 +1133,12 @@ local function AddTab(key, icon, label, accent)
 	accent = accent or C.blue
 
 	local btn = Instance.new("Frame")
-	btn.Size = UDim2.new(0, 50, 0, 52)    -- taille ajustée pour sidebar 58px
+	btn.Size = UDim2.new(0, 50, 0, 52)
 	btn.BackgroundColor3 = C.active; btn.BackgroundTransparency = 1
 	btn.BorderSizePixel = 0; btn.LayoutOrder = #Tabs + 1
 	btn.ZIndex = 14; btn.Parent = Sidebar
 	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 9)
 
-	-- Indicateur DROITE (puisque sidebar est à gauche, la bordure active est à droite)
 	local ind = Instance.new("Frame")
 	ind.Size = UDim2.new(0, 2, 0, 26); ind.Position = UDim2.new(1, -2, 0.5, -13)
 	ind.BackgroundColor3 = accent; ind.BackgroundTransparency = 1
@@ -1820,8 +1892,15 @@ RBtn.MouseButton1Click:Connect(function()
 	local allC={FlyConn,GodConn,InfJumpConn,NoClipConn,AntiAFKConn,SpectateConn,ChatSpyConn,
 		SpinConn,AutoJumpConn,BhopConn,ClickTPConn,TracerConn,RainbowConn,ThirdPersonConn,LoopTPConn}
 	for _,c in ipairs(allC) do if c then pcall(function() c:Disconnect() end) end end
-	if FlyBV then FlyBV:Destroy() FlyBV=nil end
-	if FlyBG then FlyBG:Destroy() FlyBG=nil end
+	ClearESPConnections()
+	-- Nettoie fly (nouvelle API)
+	local r = Root()
+	if r then
+		local att = r:FindFirstChild("__APflyAtt")
+		if att then att:Destroy() end
+	end
+	if FlyBV and FlyBV.Parent then FlyBV:Destroy() end; FlyBV = nil
+	if FlyBG and FlyBG.Parent then FlyBG:Destroy() end; FlyBG = nil
 	for part,sz in pairs(HitboxOrigSizes) do pcall(function() part.Size=sz end) end
 	HitboxOrigSizes={}
 	for _,line in pairs(TracerLines) do pcall(function() line:Destroy() end) end
@@ -1858,7 +1937,7 @@ local featureCount = 0
 for _ in pairs(Dispatch) do featureCount = featureCount + 1 end
 
 local infos={
-	{"Version","v6.0 — Sidebar"},
+	{"Version","v6.1 — Sidebar Fixed"},
 	{"Joueur",LocalPlayer.Name},
 	{"UserId",tostring(LocalPlayer.UserId)},
 	{"Âge du compte",tostring(LocalPlayer.AccountAge).." jours"},
@@ -1918,7 +1997,7 @@ Track(UserInputService.InputBegan:Connect(function(inp, proc)
 end))
 
 print("╔══════════════════════════════════════════════════╗")
-print("║   ADMIN PANEL v6 — Sidebar GAUCHE (FIXED)        ║")
+print("║   ADMIN PANEL v6.1 — ESP Auto + Fly Fixed        ║")
 print("║   Joueur  : " .. LocalPlayer.Name)
 print("║   [ G ]   → Toggle Panel                         ║")
 print("╚══════════════════════════════════════════════════╝")

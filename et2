@@ -3,318 +3,528 @@
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 
--- Supprime l'ancien GUI s'il existe
+-- Nettoyage
 local oldGui = player:WaitForChild("PlayerGui"):FindFirstChild("DeathGui")
-if oldGui then
-	oldGui:Destroy()
-end
+if oldGui then oldGui:Destroy() end
 
 --------------------------------------------------
--- Variables
+-- État
 --------------------------------------------------
-local running = false
-local minInterval = 1
-local maxInterval = 2
+local State = {
+	running   = false,
+	paused    = false,
+	stopped   = false,
+	current   = 0,
+	total     = 0,
+	minDelay  = 1,
+	maxDelay  = 2,
+}
 
 --------------------------------------------------
 -- ScreenGui
 --------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "DeathGui"
+screenGui.Name        = "DeathGui"
 screenGui.ResetOnSpawn = false
-screenGui.Parent = player.PlayerGui
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent      = player.PlayerGui
 
 --------------------------------------------------
--- Fonction : rendre un objet déplaçable
+-- Helpers
 --------------------------------------------------
-local function makeDraggable(object)
-	local dragging = false
-	local dragInput
-	local dragStart
-	local startPosition
+local function corner(parent, radius)
+	local c = Instance.new("UICorner", parent)
+	c.CornerRadius = UDim.new(0, radius or 8)
+end
 
-	object.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1
-			or input.UserInputType == Enum.UserInputType.Touch then
+local function stroke(parent, color, thickness)
+	local s = Instance.new("UIStroke", parent)
+	s.Color = color or Color3.fromRGB(80, 80, 90)
+	s.Thickness = thickness or 1
+end
 
-			dragging = true
-			dragStart = input.Position
-			startPosition = object.Position
-
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					dragging = false
-				end
+local function makeDraggable(obj)
+	local drag, dragInput, dragStart, startPos = false
+	obj.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1
+		or inp.UserInputType == Enum.UserInputType.Touch then
+			drag = true; dragStart = inp.Position; startPos = obj.Position
+			inp.Changed:Connect(function()
+				if inp.UserInputState == Enum.UserInputState.End then drag = false end
 			end)
 		end
 	end)
-
-	object.InputChanged:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseMovement
-			or input.UserInputType == Enum.UserInputType.Touch then
-			dragInput = input
-		end
+	obj.InputChanged:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseMovement
+		or inp.UserInputType == Enum.UserInputType.Touch then dragInput = inp end
 	end)
-
-	UserInputService.InputChanged:Connect(function(input)
-		if dragging and input == dragInput then
-			local delta = input.Position - dragStart
-
-			object.Position = UDim2.new(
-				startPosition.X.Scale,
-				startPosition.X.Offset + delta.X,
-				startPosition.Y.Scale,
-				startPosition.Y.Offset + delta.Y
+	UserInputService.InputChanged:Connect(function(inp)
+		if drag and inp == dragInput then
+			local d = inp.Position - dragStart
+			obj.Position = UDim2.new(
+				startPos.X.Scale, startPos.X.Offset + d.X,
+				startPos.Y.Scale, startPos.Y.Offset + d.Y
 			)
 		end
 	end)
 end
 
---------------------------------------------------
--- Bouton Toggle
---------------------------------------------------
-local toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(0, 120, 0, 40)
-toggleButton.Position = UDim2.new(0, 20, 0.5, -20)
-toggleButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-toggleButton.TextColor3 = Color3.new(1, 1, 1)
-toggleButton.TextScaled = true
-toggleButton.Font = Enum.Font.SourceSansBold
-toggleButton.Text = "Afficher GUI"
-toggleButton.Parent = screenGui
-
-Instance.new("UICorner", toggleButton)
-
-makeDraggable(toggleButton)
+local function pulse(btn, color)
+	TweenService:Create(btn, TweenInfo.new(0.08), {BackgroundColor3 = color:lerp(Color3.new(1,1,1), 0.15)}):Play()
+	task.delay(0.1, function()
+		TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundColor3 = color}):Play()
+	end)
+end
 
 --------------------------------------------------
--- GUI principal
+-- Bouton flottant toggle
 --------------------------------------------------
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 190)
-frame.Position = UDim2.new(0.5, -150, 0.5, -95)
-frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-frame.Visible = false
-frame.Parent = screenGui
-
-Instance.new("UICorner", frame)
-
-makeDraggable(frame)
-
---------------------------------------------------
--- Titre
---------------------------------------------------
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 40)
-title.BackgroundTransparency = 1
-title.Text = "Mourir plusieurs fois"
-title.TextColor3 = Color3.new(1, 1, 1)
-title.TextScaled = true
-title.Font = Enum.Font.SourceSansBold
-title.Parent = frame
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size            = UDim2.new(0, 130, 0, 36)
+toggleBtn.Position        = UDim2.new(0, 16, 0.5, -18)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+toggleBtn.TextColor3      = Color3.fromRGB(220, 220, 240)
+toggleBtn.TextScaled      = true
+toggleBtn.Font            = Enum.Font.GothamBold
+toggleBtn.Text            = "☠  Ouvrir"
+toggleBtn.Parent          = screenGui
+corner(toggleBtn, 10)
+stroke(toggleBtn, Color3.fromRGB(100, 80, 200), 1.5)
+makeDraggable(toggleBtn)
 
 --------------------------------------------------
--- Bouton Paramètres
+-- Fenêtre principale (340 x 380)
 --------------------------------------------------
-local settingsButton = Instance.new("ImageButton")
-settingsButton.Size = UDim2.new(0, 30, 0, 30)
-settingsButton.Position = UDim2.new(1, -35, 0, 5)
-settingsButton.BackgroundTransparency = 1
-settingsButton.Image = "rbxassetid://72175082236391"
-settingsButton.Parent = frame
+local W, H = 340, 400
+local main = Instance.new("Frame")
+main.Size              = UDim2.new(0, W, 0, H)
+main.Position          = UDim2.new(0.5, -W/2, 0.5, -H/2)
+main.BackgroundColor3  = Color3.fromRGB(18, 18, 24)
+main.Visible           = false
+main.Parent            = screenGui
+corner(main, 12)
+stroke(main, Color3.fromRGB(100, 80, 200), 1.5)
+makeDraggable(main)
+
+-- Bande de couleur en haut
+local topBar = Instance.new("Frame", main)
+topBar.Size             = UDim2.new(1, 0, 0, 46)
+topBar.BackgroundColor3 = Color3.fromRGB(100, 80, 200)
+corner(topBar, 12)
+
+-- Cache les coins bas de la topbar
+local topBarFix = Instance.new("Frame", main)
+topBarFix.Size            = UDim2.new(1, 0, 0, 20)
+topBarFix.Position        = UDim2.new(0, 0, 0, 26)
+topBarFix.BackgroundColor3 = Color3.fromRGB(100, 80, 200)
+topBarFix.BorderSizePixel = 0
+
+local titleLbl = Instance.new("TextLabel", topBar)
+titleLbl.Size              = UDim2.new(1, -40, 1, 0)
+titleLbl.Position          = UDim2.new(0, 14, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text              = "☠  Death Farm Pro"
+titleLbl.TextColor3        = Color3.new(1, 1, 1)
+titleLbl.TextScaled        = true
+titleLbl.Font              = Enum.Font.GothamBold
+
+-- Bouton settings ⚙
+local settingsBtn = Instance.new("TextButton", topBar)
+settingsBtn.Size              = UDim2.new(0, 30, 0, 30)
+settingsBtn.Position          = UDim2.new(1, -36, 0, 8)
+settingsBtn.BackgroundTransparency = 1
+settingsBtn.TextColor3        = Color3.new(1, 1, 1)
+settingsBtn.Text              = "⚙"
+settingsBtn.TextScaled        = true
+settingsBtn.Font              = Enum.Font.GothamBold
 
 --------------------------------------------------
 -- Champ nombre de morts
 --------------------------------------------------
-local textBox = Instance.new("TextBox")
-textBox.Size = UDim2.new(0.8, 0, 0, 40)
-textBox.Position = UDim2.new(0.1, 0, 0, 50)
-textBox.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-textBox.TextColor3 = Color3.new(1, 1, 1)
-textBox.PlaceholderText = "Nombre de morts"
-textBox.Text = ""
-textBox.TextScaled = true
-textBox.ClearTextOnFocus = false
-textBox.Font = Enum.Font.SourceSans
-textBox.Parent = frame
-
-Instance.new("UICorner", textBox)
-
---------------------------------------------------
--- Compteur
---------------------------------------------------
-local counterLabel = Instance.new("TextLabel")
-counterLabel.Size = UDim2.new(0.8, 0, 0, 30)
-counterLabel.Position = UDim2.new(0.1, 0, 0, 100)
-counterLabel.BackgroundTransparency = 1
-counterLabel.Text = "0 / 0"
-counterLabel.TextColor3 = Color3.new(1, 1, 1)
-counterLabel.TextScaled = true
-counterLabel.Font = Enum.Font.SourceSans
-counterLabel.Parent = frame
+local inputBox = Instance.new("TextBox", main)
+inputBox.Size             = UDim2.new(1, -32, 0, 40)
+inputBox.Position         = UDim2.new(0, 16, 0, 60)
+inputBox.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
+inputBox.TextColor3       = Color3.fromRGB(220, 220, 240)
+inputBox.PlaceholderText  = "Nombre de morts..."
+inputBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 120)
+inputBox.Text             = ""
+inputBox.TextScaled       = true
+inputBox.ClearTextOnFocus = false
+inputBox.Font             = Enum.Font.Gotham
+corner(inputBox, 8)
+stroke(inputBox, Color3.fromRGB(70, 60, 120))
 
 --------------------------------------------------
--- Bouton Mourir
+-- Barre de progression
 --------------------------------------------------
-local deathButton = Instance.new("TextButton")
-deathButton.Size = UDim2.new(0.8, 0, 0, 40)
-deathButton.Position = UDim2.new(0.1, 0, 0, 140)
-deathButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-deathButton.TextColor3 = Color3.new(1, 1, 1)
-deathButton.TextScaled = true
-deathButton.Font = Enum.Font.SourceSansBold
-deathButton.Text = "Mourir"
-deathButton.Parent = frame
+local progressBg = Instance.new("Frame", main)
+progressBg.Size             = UDim2.new(1, -32, 0, 16)
+progressBg.Position         = UDim2.new(0, 16, 0, 112)
+progressBg.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+corner(progressBg, 8)
 
-Instance.new("UICorner", deathButton)
+local progressFill = Instance.new("Frame", progressBg)
+progressFill.Size             = UDim2.new(0, 0, 1, 0)
+progressFill.BackgroundColor3 = Color3.fromRGB(100, 80, 200)
+progressFill.BorderSizePixel  = 0
+corner(progressFill, 8)
+
+local progressLbl = Instance.new("TextLabel", main)
+progressLbl.Size              = UDim2.new(1, -32, 0, 20)
+progressLbl.Position          = UDim2.new(0, 16, 0, 130)
+progressLbl.BackgroundTransparency = 1
+progressLbl.Text              = "0 / 0  —  En attente"
+progressLbl.TextColor3        = Color3.fromRGB(160, 150, 220)
+progressLbl.TextScaled        = true
+progressLbl.Font              = Enum.Font.Gotham
+
+--------------------------------------------------
+-- Boutons de contrôle (Démarrer / Pause / Stop)
+--------------------------------------------------
+local BTN_Y = 162
+local BTN_H = 38
+
+local function makeBtn(text, color, xOff, wOff)
+	local b = Instance.new("TextButton", main)
+	b.Size              = UDim2.new(0.33, wOff or -6, 0, BTN_H)
+	b.Position          = UDim2.new(0, xOff, 0, BTN_Y)
+	b.BackgroundColor3  = color
+	b.TextColor3        = Color3.new(1, 1, 1)
+	b.Text              = text
+	b.TextScaled        = true
+	b.Font              = Enum.Font.GothamBold
+	corner(b, 8)
+	return b
+end
+
+-- Démarrer / Reprendre
+local startBtn = makeBtn("▶  Démarrer", Color3.fromRGB(80, 170, 80),   16, -4)
+-- Pause
+local pauseBtn = makeBtn("⏸  Pause",    Color3.fromRGB(200, 150, 30), 130, -5)
+-- Stop
+local stopBtn  = makeBtn("■  Stop",     Color3.fromRGB(190, 50, 50),  243, -11)
+
+-- État initial des boutons
+pauseBtn.Active = false; pauseBtn.BackgroundTransparency = 0.5
+stopBtn.Active  = false; stopBtn.BackgroundTransparency  = 0.5
+
+--------------------------------------------------
+-- Bouton Recommencer
+--------------------------------------------------
+local resetBtn = Instance.new("TextButton", main)
+resetBtn.Size             = UDim2.new(1, -32, 0, 36)
+resetBtn.Position         = UDim2.new(0, 16, 0, 210)
+resetBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+resetBtn.TextColor3       = Color3.fromRGB(180, 170, 230)
+resetBtn.Text             = "↩  Recommencer depuis le début"
+resetBtn.TextScaled       = true
+resetBtn.Font             = Enum.Font.Gotham
+corner(resetBtn, 8)
+stroke(resetBtn, Color3.fromRGB(80, 70, 130))
+
+--------------------------------------------------
+-- Log / Statut
+--------------------------------------------------
+local logFrame = Instance.new("ScrollingFrame", main)
+logFrame.Size              = UDim2.new(1, -32, 0, 120)
+logFrame.Position          = UDim2.new(0, 16, 0, 258)
+logFrame.BackgroundColor3  = Color3.fromRGB(22, 22, 30)
+logFrame.BorderSizePixel   = 0
+logFrame.ScrollBarThickness = 3
+logFrame.CanvasSize        = UDim2.new(0, 0, 0, 0)
+corner(logFrame, 8)
+stroke(logFrame, Color3.fromRGB(55, 50, 90))
+
+local logLayout = Instance.new("UIListLayout", logFrame)
+logLayout.Padding         = UDim.new(0, 2)
+logLayout.SortOrder       = Enum.SortOrder.LayoutOrder
+
+local logPad = Instance.new("UIPadding", logFrame)
+logPad.PaddingLeft   = UDim.new(0, 6)
+logPad.PaddingRight  = UDim.new(0, 6)
+logPad.PaddingTop    = UDim.new(0, 4)
+logPad.PaddingBottom = UDim.new(0, 4)
+
+local logEntries = {}
+local function addLog(msg, color)
+	color = color or Color3.fromRGB(200, 200, 220)
+	local lbl = Instance.new("TextLabel", logFrame)
+	lbl.Size              = UDim2.new(1, 0, 0, 18)
+	lbl.BackgroundTransparency = 1
+	lbl.Text              = msg
+	lbl.TextColor3        = color
+	lbl.TextXAlignment    = Enum.TextXAlignment.Left
+	lbl.TextScaled        = true
+	lbl.Font              = Enum.Font.Code
+	lbl.LayoutOrder       = #logEntries + 1
+	table.insert(logEntries, lbl)
+
+	if #logEntries > 40 then
+		logEntries[1]:Destroy()
+		table.remove(logEntries, 1)
+	end
+
+	-- scroll to bottom
+	logLayout:ApplyLayout()
+	logFrame.CanvasSize = UDim2.new(0, 0, 0, logLayout.AbsoluteContentSize.Y + 8)
+	logFrame.CanvasPosition = Vector2.new(0, math.huge)
+end
 
 --------------------------------------------------
 -- Fenêtre Paramètres
 --------------------------------------------------
-local settingsFrame = Instance.new("Frame")
-settingsFrame.Size = UDim2.new(0, 250, 0, 200)
-settingsFrame.Position = UDim2.new(0.5, -125, 0.5, -100)
-settingsFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-settingsFrame.Visible = false
-settingsFrame.Parent = screenGui
+local SW, SH = 260, 200
+local settingsWin = Instance.new("Frame", screenGui)
+settingsWin.Size             = UDim2.new(0, SW, 0, SH)
+settingsWin.Position         = UDim2.new(0.5, SW/2 + 10, 0.5, -SH/2)
+settingsWin.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+settingsWin.Visible          = false
+corner(settingsWin, 12)
+stroke(settingsWin, Color3.fromRGB(100, 80, 200), 1.5)
+makeDraggable(settingsWin)
 
-Instance.new("UICorner", settingsFrame)
+local sTitle = Instance.new("TextLabel", settingsWin)
+sTitle.Size              = UDim2.new(1, 0, 0, 38)
+sTitle.BackgroundColor3  = Color3.fromRGB(100, 80, 200)
+sTitle.Text              = "⚙  Paramètres"
+sTitle.TextColor3        = Color3.new(1,1,1)
+sTitle.TextScaled        = true
+sTitle.Font              = Enum.Font.GothamBold
+corner(sTitle, 12)
 
-makeDraggable(settingsFrame)
+local sFix = Instance.new("Frame", settingsWin)
+sFix.Size             = UDim2.new(1, 0, 0, 12)
+sFix.Position         = UDim2.new(0, 0, 0, 26)
+sFix.BackgroundColor3 = Color3.fromRGB(100, 80, 200)
+sFix.BorderSizePixel  = 0
 
---------------------------------------------------
--- Titre paramètres
---------------------------------------------------
-local settingsTitle = Instance.new("TextLabel")
-settingsTitle.Size = UDim2.new(1, 0, 0, 35)
-settingsTitle.BackgroundTransparency = 1
-settingsTitle.Text = "Paramètres"
-settingsTitle.TextColor3 = Color3.new(1, 1, 1)
-settingsTitle.TextScaled = true
-settingsTitle.Font = Enum.Font.SourceSansBold
-settingsTitle.Parent = settingsFrame
+local function makeInput(parent, placeholder, default, yPos)
+	local box = Instance.new("TextBox", parent)
+	box.Size              = UDim2.new(1, -24, 0, 34)
+	box.Position          = UDim2.new(0, 12, 0, yPos)
+	box.BackgroundColor3  = Color3.fromRGB(30, 30, 40)
+	box.TextColor3        = Color3.fromRGB(220, 220, 240)
+	box.PlaceholderText   = placeholder
+	box.PlaceholderColor3 = Color3.fromRGB(100, 100, 120)
+	box.Text              = tostring(default)
+	box.TextScaled        = true
+	box.ClearTextOnFocus  = false
+	box.Font              = Enum.Font.Gotham
+	corner(box, 7)
+	stroke(box, Color3.fromRGB(70, 60, 120))
+	return box
+end
 
---------------------------------------------------
--- Intervalle minimum
---------------------------------------------------
-local minBox = Instance.new("TextBox")
-minBox.Size = UDim2.new(0.8, 0, 0, 35)
-minBox.Position = UDim2.new(0.1, 0, 0, 50)
-minBox.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-minBox.TextColor3 = Color3.new(1, 1, 1)
-minBox.PlaceholderText = "Intervalle minimum"
-minBox.Text = tostring(minInterval)
-minBox.ClearTextOnFocus = false
-minBox.TextScaled = true
-minBox.Parent = settingsFrame
+local minBox = makeInput(settingsWin, "Délai min (sec)", State.minDelay, 52)
+local maxBox = makeInput(settingsWin, "Délai max (sec)", State.maxDelay, 96)
 
-Instance.new("UICorner", minBox)
-
---------------------------------------------------
--- Intervalle maximum
---------------------------------------------------
-local maxBox = Instance.new("TextBox")
-maxBox.Size = UDim2.new(0.8, 0, 0, 35)
-maxBox.Position = UDim2.new(0.1, 0, 0, 95)
-maxBox.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-maxBox.TextColor3 = Color3.new(1, 1, 1)
-maxBox.PlaceholderText = "Intervalle maximum"
-maxBox.Text = tostring(maxInterval)
-maxBox.ClearTextOnFocus = false
-maxBox.TextScaled = true
-maxBox.Parent = settingsFrame
-
-Instance.new("UICorner", maxBox)
-
---------------------------------------------------
--- Sauvegarder paramètres
---------------------------------------------------
-local saveButton = Instance.new("TextButton")
-saveButton.Size = UDim2.new(0.8, 0, 0, 35)
-saveButton.Position = UDim2.new(0.1, 0, 0, 145)
-saveButton.BackgroundColor3 = Color3.fromRGB(70, 150, 70)
-saveButton.TextColor3 = Color3.new(1, 1, 1)
-saveButton.TextScaled = true
-saveButton.Font = Enum.Font.SourceSansBold
-saveButton.Text = "Sauvegarder"
-saveButton.Parent = settingsFrame
-
-Instance.new("UICorner", saveButton)
+local saveBtn = Instance.new("TextButton", settingsWin)
+saveBtn.Size             = UDim2.new(1, -24, 0, 34)
+saveBtn.Position         = UDim2.new(0, 12, 0, 148)
+saveBtn.BackgroundColor3 = Color3.fromRGB(100, 80, 200)
+saveBtn.TextColor3       = Color3.new(1,1,1)
+saveBtn.Text             = "✔  Sauvegarder"
+saveBtn.TextScaled       = true
+saveBtn.Font             = Enum.Font.GothamBold
+corner(saveBtn, 8)
 
 --------------------------------------------------
--- Toggle GUI
+-- Utilitaires UI
 --------------------------------------------------
-toggleButton.MouseButton1Click:Connect(function()
-	frame.Visible = not frame.Visible
+local function setButtonsState(isRunning)
+	startBtn.Active             = not isRunning
+	startBtn.BackgroundTransparency = isRunning and 0.5 or 0
+	pauseBtn.Active             = isRunning
+	pauseBtn.BackgroundTransparency = isRunning and 0 or 0.5
+	stopBtn.Active              = isRunning
+	stopBtn.BackgroundTransparency  = isRunning and 0 or 0.5
+end
 
-	if frame.Visible then
-		toggleButton.Text = "Cacher GUI"
+local function updateProgress()
+	local pct = State.total > 0 and (State.current / State.total) or 0
+	TweenService:Create(progressFill, TweenInfo.new(0.3), {
+		Size = UDim2.new(pct, 0, 1, 0)
+	}):Play()
+
+	local statusTxt
+	if State.paused then
+		statusTxt = "En pause"
+	elseif State.running then
+		statusTxt = "En cours..."
+	elseif State.current > 0 and State.current == State.total then
+		statusTxt = "✔ Terminé !"
 	else
-		toggleButton.Text = "Afficher GUI"
+		statusTxt = "En attente"
+	end
+
+	progressLbl.Text = State.current .. " / " .. State.total .. "  —  " .. statusTxt
+end
+
+local function resetState()
+	State.running = false
+	State.paused  = false
+	State.stopped = false
+	State.current = 0
+	State.total   = 0
+	setButtonsState(false)
+	updateProgress()
+end
+
+--------------------------------------------------
+-- Toggle fenêtre
+--------------------------------------------------
+toggleBtn.MouseButton1Click:Connect(function()
+	main.Visible = not main.Visible
+	toggleBtn.Text = main.Visible and "☠  Fermer" or "☠  Ouvrir"
+	pulse(toggleBtn, Color3.fromRGB(30, 30, 38))
+end)
+
+settingsBtn.MouseButton1Click:Connect(function()
+	settingsWin.Visible = not settingsWin.Visible
+end)
+
+saveBtn.MouseButton1Click:Connect(function()
+	local mn = tonumber(minBox.Text)
+	local mx = tonumber(maxBox.Text)
+	if mn and mx and mn >= 0 and mx >= mn then
+		State.minDelay = mn
+		State.maxDelay = mx
+		settingsWin.Visible = false
+		addLog("[Paramètres] Délai : " .. mn .. "s – " .. mx .. "s", Color3.fromRGB(100, 200, 120))
+	else
+		addLog("[Erreur] Intervalles invalides !", Color3.fromRGB(220, 80, 80))
 	end
 end)
 
 --------------------------------------------------
--- Ouvrir/Fermer paramètres
+-- Pause
 --------------------------------------------------
-settingsButton.MouseButton1Click:Connect(function()
-	settingsFrame.Visible = not settingsFrame.Visible
-end)
-
---------------------------------------------------
--- Sauvegarder paramètres
---------------------------------------------------
-saveButton.MouseButton1Click:Connect(function()
-	local minValue = tonumber(minBox.Text)
-	local maxValue = tonumber(maxBox.Text)
-
-	if minValue and maxValue and minValue > 0 and maxValue >= minValue then
-		minInterval = minValue
-		maxInterval = maxValue
-
-		minBox.Text = tostring(minInterval)
-		maxBox.Text = tostring(maxInterval)
-
-		settingsFrame.Visible = false
+pauseBtn.MouseButton1Click:Connect(function()
+	if not State.running then return end
+	if State.paused then
+		State.paused = false
+		pauseBtn.Text = "⏸  Pause"
+		addLog("[Reprise] Reprise en cours...", Color3.fromRGB(100, 200, 120))
+		updateProgress()
+	else
+		State.paused = true
+		pauseBtn.Text = "▶  Reprendre"
+		addLog("[Pause] Mis en pause à " .. State.current .. "/" .. State.total, Color3.fromRGB(220, 180, 60))
+		updateProgress()
 	end
+	pulse(pauseBtn, State.paused and Color3.fromRGB(200, 150, 30) or Color3.fromRGB(200, 150, 30))
 end)
 
 --------------------------------------------------
--- Système de morts
+-- Stop
 --------------------------------------------------
-deathButton.MouseButton1Click:Connect(function()
-	if running then
+stopBtn.MouseButton1Click:Connect(function()
+	if not State.running then return end
+	State.stopped = true
+	State.paused  = false
+	addLog("[Stop] Arrêt forcé à " .. State.current .. "/" .. State.total, Color3.fromRGB(220, 80, 80))
+end)
+
+--------------------------------------------------
+-- Recommencer
+--------------------------------------------------
+resetBtn.MouseButton1Click:Connect(function()
+	if State.running then
+		State.stopped = true
+		State.paused  = false
+		task.wait(0.2)
+	end
+	resetState()
+	inputBox.Text = ""
+	addLog("[Reset] Réinitialisé.", Color3.fromRGB(140, 140, 200))
+end)
+
+--------------------------------------------------
+-- Démarrer
+--------------------------------------------------
+startBtn.MouseButton1Click:Connect(function()
+	if State.running then return end
+
+	local total = math.floor(tonumber(inputBox.Text) or 0)
+	if total <= 0 then
+		addLog("[Erreur] Entrez un nombre valide.", Color3.fromRGB(220, 80, 80))
 		return
 	end
 
-	local total = tonumber(textBox.Text)
+	State.running = true
+	State.paused  = false
+	State.stopped = false
+	State.total   = total
+	State.current = 0
+	setButtonsState(true)
+	pauseBtn.Text = "⏸  Pause"
 
-	if not total or total <= 0 then
-		counterLabel.Text = "Nombre invalide"
-		return
-	end
+	addLog("[Start] Démarrage : " .. total .. " mort(s)", Color3.fromRGB(100, 200, 120))
+	addLog("[Config] Délai : " .. State.minDelay .. "s – " .. State.maxDelay .. "s", Color3.fromRGB(140, 140, 200))
 
-	total = math.floor(total)
-	running = true
+	task.spawn(function()
+		for i = 1, total do
 
-	for i = 1, total do
-		counterLabel.Text = i .. " / " .. total
+			-- Attente si en pause
+			while State.paused do
+				task.wait(0.2)
+			end
 
-		local character = player.Character or player.CharacterAdded:Wait()
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
+			if State.stopped then
+				break
+			end
 
-		if humanoid then
-			humanoid.Health = 0
+			State.current = i
+			updateProgress()
+
+			local character = player.Character or player.CharacterAdded:Wait()
+			local humanoid  = character:FindFirstChildOfClass("Humanoid")
+
+			if humanoid and humanoid.Health > 0 then
+				humanoid.Health = 0
+				addLog("[" .. i .. "/" .. total .. "] Mort infligée ✓", Color3.fromRGB(200, 100, 100))
+			else
+				addLog("[" .. i .. "/" .. total .. "] Humanoid introuvable", Color3.fromRGB(220, 150, 50))
+			end
+
+			player.CharacterAdded:Wait()
+
+			-- Attente si en pause avant le délai
+			while State.paused do
+				task.wait(0.2)
+			end
+			if State.stopped then break end
+
+			local delay = State.minDelay + math.random() * (State.maxDelay - State.minDelay)
+			task.wait(delay)
 		end
 
-		player.CharacterAdded:Wait()
+		local wasAborted = State.stopped
+		State.running = false
+		State.paused  = false
+		State.stopped = false
 
-		task.wait(minInterval + math.random() * (maxInterval - minInterval))
-	end
+		setButtonsState(false)
+		pauseBtn.Text = "⏸  Pause"
+		updateProgress()
 
-	counterLabel.Text = total .. " / " .. total .. " (Terminé)"
-	running = false
+		if wasAborted then
+			addLog("[Stop] Séquence interrompue.", Color3.fromRGB(220, 100, 60))
+		else
+			addLog("[Fin] Séquence complète ! " .. total .. "/" .. total, Color3.fromRGB(100, 220, 100))
+			State.current = State.total
+			updateProgress()
+		end
+	end)
 end)
+
+--------------------------------------------------
+-- Init
+--------------------------------------------------
+addLog("[Init] Death Farm Pro chargé.", Color3.fromRGB(100, 80, 200))
+updateProgress()

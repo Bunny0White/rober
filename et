@@ -1,0 +1,109 @@
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+
+-- Création du ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "DeathGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Frame principale
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 300, 0, 180)
+frame.Position = UDim2.new(0.5, -150, 0.5, -90)
+frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+frame.BorderSizePixel = 0
+frame.Parent = screenGui
+
+local corner = Instance.new("UICorner")
+corner.Parent = frame
+
+-- Titre
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 40)
+title.BackgroundTransparency = 1
+title.Text = "Mourir plusieurs fois"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.TextScaled = true
+title.Font = Enum.Font.SourceSansBold
+title.Parent = frame
+
+-- Champ de saisie
+local textBox = Instance.new("TextBox")
+textBox.Size = UDim2.new(0.8, 0, 0, 40)
+textBox.Position = UDim2.new(0.1, 0, 0, 50)
+textBox.PlaceholderText = "Entrez un nombre"
+textBox.Text = ""
+textBox.TextColor3 = Color3.new(1, 1, 1)
+textBox.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+textBox.TextScaled = true
+textBox.Font = Enum.Font.SourceSans
+textBox.ClearTextOnFocus = false
+textBox.Parent = frame
+
+local textCorner = Instance.new("UICorner")
+textCorner.Parent = textBox
+
+-- Compteur
+local counterLabel = Instance.new("TextLabel")
+counterLabel.Size = UDim2.new(0.8, 0, 0, 30)
+counterLabel.Position = UDim2.new(0.1, 0, 0, 100)
+counterLabel.BackgroundTransparency = 1
+counterLabel.Text = "0 / 0"
+counterLabel.TextColor3 = Color3.new(1, 1, 1)
+counterLabel.TextScaled = true
+counterLabel.Font = Enum.Font.SourceSans
+counterLabel.Parent = frame
+
+-- Bouton
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0.8, 0, 0, 40)
+button.Position = UDim2.new(0.1, 0, 0, 130)
+button.Text = "Mourir"
+button.TextColor3 = Color3.new(1, 1, 1)
+button.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+button.TextScaled = true
+button.Font = Enum.Font.SourceSansBold
+button.Parent = frame
+
+local buttonCorner = Instance.new("UICorner")
+buttonCorner.Parent = button
+
+local isRunning = false
+
+button.MouseButton1Click:Connect(function()
+	if isRunning then
+		return
+	end
+
+	local totalDeaths = tonumber(textBox.Text)
+
+	if not totalDeaths or totalDeaths <= 0 then
+		counterLabel.Text = "Nombre invalide"
+		return
+	end
+
+	totalDeaths = math.floor(totalDeaths)
+	isRunning = true
+
+	for i = 1, totalDeaths do
+		counterLabel.Text = i .. " / " .. totalDeaths
+
+		local character = player.Character or player.CharacterAdded:Wait()
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+		if humanoid then
+			humanoid.Health = 0
+		end
+
+		-- Attendre le respawn
+		player.CharacterAdded:Wait()
+
+		-- Intervalle aléatoire entre 1 et 2 secondes
+		task.wait(math.random(100, 200) / 100)
+	end
+
+	counterLabel.Text = totalDeaths .. " / " .. totalDeaths .. " (Terminé)"
+	isRunning = false
+end)

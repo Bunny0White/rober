@@ -1,36 +1,48 @@
+-- LocalScript
+-- StarterPlayer > StarterPlayerScripts
+
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 
--- Évite les doublons
-local existingGui = player.PlayerGui:FindFirstChild("DeathGui")
-if existingGui then
-	existingGui:Destroy()
+-- Supprime l'ancien GUI s'il existe
+local oldGui = player:WaitForChild("PlayerGui"):FindFirstChild("DeathGui")
+if oldGui then
+	oldGui:Destroy()
 end
 
+--------------------------------------------------
+-- Variables
+--------------------------------------------------
+local running = false
+local minInterval = 1
+local maxInterval = 2
+
+--------------------------------------------------
 -- ScreenGui
+--------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "DeathGui"
 screenGui.ResetOnSpawn = false
-screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.Parent = player.PlayerGui
 
 --------------------------------------------------
--- Fonction pour rendre un objet déplaçable
+-- Fonction : rendre un objet déplaçable
 --------------------------------------------------
-local function makeDraggable(dragObject)
+local function makeDraggable(object)
 	local dragging = false
 	local dragInput
 	local dragStart
 	local startPosition
 
-	dragObject.InputBegan:Connect(function(input)
+	object.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1
 			or input.UserInputType == Enum.UserInputType.Touch then
 
 			dragging = true
 			dragStart = input.Position
-			startPosition = dragObject.Position
+			startPosition = object.Position
 
 			input.Changed:Connect(function()
 				if input.UserInputState == Enum.UserInputState.End then
@@ -40,7 +52,7 @@ local function makeDraggable(dragObject)
 		end
 	end)
 
-	dragObject.InputChanged:Connect(function(input)
+	object.InputChanged:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseMovement
 			or input.UserInputType == Enum.UserInputType.Touch then
 			dragInput = input
@@ -48,10 +60,10 @@ local function makeDraggable(dragObject)
 	end)
 
 	UserInputService.InputChanged:Connect(function(input)
-		if input == dragInput and dragging then
+		if dragging and input == dragInput then
 			local delta = input.Position - dragStart
 
-			dragObject.Position = UDim2.new(
+			object.Position = UDim2.new(
 				startPosition.X.Scale,
 				startPosition.X.Offset + delta.X,
 				startPosition.Y.Scale,
@@ -79,11 +91,11 @@ Instance.new("UICorner", toggleButton)
 makeDraggable(toggleButton)
 
 --------------------------------------------------
--- Fenêtre principale
+-- GUI principal
 --------------------------------------------------
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 180)
-frame.Position = UDim2.new(0.5, -150, 0.5, -90)
+frame.Size = UDim2.new(0, 300, 0, 190)
+frame.Position = UDim2.new(0.5, -150, 0.5, -95)
 frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 frame.Visible = false
 frame.Parent = screenGui
@@ -105,7 +117,17 @@ title.Font = Enum.Font.SourceSansBold
 title.Parent = frame
 
 --------------------------------------------------
--- Champ de saisie
+-- Bouton Paramètres
+--------------------------------------------------
+local settingsButton = Instance.new("ImageButton")
+settingsButton.Size = UDim2.new(0, 30, 0, 30)
+settingsButton.Position = UDim2.new(1, -35, 0, 5)
+settingsButton.BackgroundTransparency = 1
+settingsButton.Image = "rbxassetid://72175082236391"
+settingsButton.Parent = frame
+
+--------------------------------------------------
+-- Champ nombre de morts
 --------------------------------------------------
 local textBox = Instance.new("TextBox")
 textBox.Size = UDim2.new(0.8, 0, 0, 40)
@@ -139,7 +161,7 @@ counterLabel.Parent = frame
 --------------------------------------------------
 local deathButton = Instance.new("TextButton")
 deathButton.Size = UDim2.new(0.8, 0, 0, 40)
-deathButton.Position = UDim2.new(0.1, 0, 0, 130)
+deathButton.Position = UDim2.new(0.1, 0, 0, 140)
 deathButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
 deathButton.TextColor3 = Color3.new(1, 1, 1)
 deathButton.TextScaled = true
@@ -150,7 +172,80 @@ deathButton.Parent = frame
 Instance.new("UICorner", deathButton)
 
 --------------------------------------------------
--- Afficher / cacher le GUI
+-- Fenêtre Paramètres
+--------------------------------------------------
+local settingsFrame = Instance.new("Frame")
+settingsFrame.Size = UDim2.new(0, 250, 0, 200)
+settingsFrame.Position = UDim2.new(0.5, -125, 0.5, -100)
+settingsFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+settingsFrame.Visible = false
+settingsFrame.Parent = screenGui
+
+Instance.new("UICorner", settingsFrame)
+
+makeDraggable(settingsFrame)
+
+--------------------------------------------------
+-- Titre paramètres
+--------------------------------------------------
+local settingsTitle = Instance.new("TextLabel")
+settingsTitle.Size = UDim2.new(1, 0, 0, 35)
+settingsTitle.BackgroundTransparency = 1
+settingsTitle.Text = "Paramètres"
+settingsTitle.TextColor3 = Color3.new(1, 1, 1)
+settingsTitle.TextScaled = true
+settingsTitle.Font = Enum.Font.SourceSansBold
+settingsTitle.Parent = settingsFrame
+
+--------------------------------------------------
+-- Intervalle minimum
+--------------------------------------------------
+local minBox = Instance.new("TextBox")
+minBox.Size = UDim2.new(0.8, 0, 0, 35)
+minBox.Position = UDim2.new(0.1, 0, 0, 50)
+minBox.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+minBox.TextColor3 = Color3.new(1, 1, 1)
+minBox.PlaceholderText = "Intervalle minimum"
+minBox.Text = tostring(minInterval)
+minBox.ClearTextOnFocus = false
+minBox.TextScaled = true
+minBox.Parent = settingsFrame
+
+Instance.new("UICorner", minBox)
+
+--------------------------------------------------
+-- Intervalle maximum
+--------------------------------------------------
+local maxBox = Instance.new("TextBox")
+maxBox.Size = UDim2.new(0.8, 0, 0, 35)
+maxBox.Position = UDim2.new(0.1, 0, 0, 95)
+maxBox.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+maxBox.TextColor3 = Color3.new(1, 1, 1)
+maxBox.PlaceholderText = "Intervalle maximum"
+maxBox.Text = tostring(maxInterval)
+maxBox.ClearTextOnFocus = false
+maxBox.TextScaled = true
+maxBox.Parent = settingsFrame
+
+Instance.new("UICorner", maxBox)
+
+--------------------------------------------------
+-- Sauvegarder paramètres
+--------------------------------------------------
+local saveButton = Instance.new("TextButton")
+saveButton.Size = UDim2.new(0.8, 0, 0, 35)
+saveButton.Position = UDim2.new(0.1, 0, 0, 145)
+saveButton.BackgroundColor3 = Color3.fromRGB(70, 150, 70)
+saveButton.TextColor3 = Color3.new(1, 1, 1)
+saveButton.TextScaled = true
+saveButton.Font = Enum.Font.SourceSansBold
+saveButton.Text = "Sauvegarder"
+saveButton.Parent = settingsFrame
+
+Instance.new("UICorner", saveButton)
+
+--------------------------------------------------
+-- Toggle GUI
 --------------------------------------------------
 toggleButton.MouseButton1Click:Connect(function()
 	frame.Visible = not frame.Visible
@@ -163,10 +258,33 @@ toggleButton.MouseButton1Click:Connect(function()
 end)
 
 --------------------------------------------------
+-- Ouvrir/Fermer paramètres
+--------------------------------------------------
+settingsButton.MouseButton1Click:Connect(function()
+	settingsFrame.Visible = not settingsFrame.Visible
+end)
+
+--------------------------------------------------
+-- Sauvegarder paramètres
+--------------------------------------------------
+saveButton.MouseButton1Click:Connect(function()
+	local minValue = tonumber(minBox.Text)
+	local maxValue = tonumber(maxBox.Text)
+
+	if minValue and maxValue and minValue > 0 and maxValue >= minValue then
+		minInterval = minValue
+		maxInterval = maxValue
+
+		minBox.Text = tostring(minInterval)
+		maxBox.Text = tostring(maxInterval)
+
+		settingsFrame.Visible = false
+	end
+end)
+
+--------------------------------------------------
 -- Système de morts
 --------------------------------------------------
-local running = false
-
 deathButton.MouseButton1Click:Connect(function()
 	if running then
 		return
@@ -194,7 +312,7 @@ deathButton.MouseButton1Click:Connect(function()
 
 		player.CharacterAdded:Wait()
 
-		task.wait(math.random(100, 200) / 100)
+		task.wait(minInterval + math.random() * (maxInterval - minInterval))
 	end
 
 	counterLabel.Text = total .. " / " .. total .. " (Terminé)"

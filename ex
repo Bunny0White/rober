@@ -1,10 +1,10 @@
 --[[
-    UI Debugger – Version Ultime
-    - Dump complet : texte, images, propriétés, hiérarchie
-    - Limite profondeur + taille (anti-crash)
-    - Modal draggable + copie
+    UI Debugger – Version Stable
+    - Toggle draggable
     - Menu draggable listant les ScreenGui
-    - Version 1.5
+    - Modal draggable + fermable
+    - Dump sécurisé (limite profondeur + taille)
+    - Copie du texte protégée
 ]]
 
 local Players = game:GetService("Players")
@@ -47,14 +47,14 @@ local function makeDraggable(frame, dragHandle)
 end
 
 ---------------------------------------------------------------------
--- DUMP COMPLET (SAFE)
+-- DUMP SÉCURISÉ
 ---------------------------------------------------------------------
-local function dumpGui(root)
-    local MAX_DEPTH = 6
-    local MAX_LEN = 60000
+local function dumpGui(gui)
+    local MAX_DEPTH = 5
+    local MAX_LEN = 20000
     local currentLen = 0
 
-    local function safe(str, add)
+    local function safeAppend(str, add)
         if currentLen > MAX_LEN then return str end
         str = str .. add
         currentLen += #add
@@ -68,44 +68,22 @@ local function dumpGui(root)
         local str = ""
 
         if depth > MAX_DEPTH then
-            return safe(str, prefix .. "... (profondeur max atteinte)\n")
+            return safeAppend(str, prefix .. "... (profondeur max atteinte)\n")
         end
 
-        str = safe(str, prefix .. obj.ClassName .. " : " .. obj.Name .. "\n")
+        str = safeAppend(str, prefix .. obj.ClassName .. " : " .. obj.Name .. "\n")
 
-        -- Récupérer toutes les propriétés lisibles
-        for _, prop in ipairs(obj:GetAttributes()) do
-            local ok, value = pcall(function()
-                return obj:GetAttribute(prop)
+        for _, prop in ipairs({"Visible", "Active", "Size", "Position", "BackgroundColor3"}) do
+            pcall(function()
+                local v = obj[prop]
+                if typeof(v) == "Color3" then v = tostring(v) end
+                str = safeAppend(str, prefix .. "  " .. prop .. " = " .. tostring(v) .. "\n")
             end)
-            if ok then
-                str = safe(str, prefix .. "  @" .. prop .. " = " .. tostring(value) .. "\n")
-            end
         end
 
-        -- Propriétés standards
-        local props = {
-            "Text", "FontFace", "TextColor3", "TextSize", "RichText",
-            "Image", "ImageColor3", "ImageRectOffset", "ImageRectSize",
-            "BackgroundColor3", "BackgroundTransparency",
-            "Size", "Position", "Visible", "Active", "AnchorPoint",
-            "BorderSizePixel", "ZIndex", "LayoutOrder"
-        }
-
-        for _, prop in ipairs(props) do
-            local ok, value = pcall(function()
-                return obj[prop]
-            end)
-            if ok then
-                if typeof(value) == "Color3" then value = tostring(value) end
-                str = safe(str, prefix .. "  " .. prop .. " = " .. tostring(value) .. "\n")
-            end
-        end
-
-        -- Enfants
         for _, child in ipairs(obj:GetChildren()) do
             if currentLen > MAX_LEN then
-                str = safe(str, prefix .. "... (taille max atteinte)\n")
+                str = safeAppend(str, prefix .. "... (taille max atteinte)\n")
                 break
             end
             str = str .. dump(child, indent + 1, depth + 1)
@@ -114,7 +92,7 @@ local function dumpGui(root)
         return str
     end
 
-    return dump(root)
+    return dump(gui)
 end
 
 ---------------------------------------------------------------------
@@ -187,7 +165,7 @@ local function refreshList()
                 -- MODAL
                 ---------------------------------------------------------
                 local modal = Instance.new("Frame", screen)
-                modal.Size = UDim2.fromOffset(500, 350)
+                modal.Size = UDim2.fromOffset(400, 300)
                 modal.Position = UDim2.fromOffset(300, 200)
                 modal.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 

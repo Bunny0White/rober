@@ -4,6 +4,7 @@
     - Limite profondeur + taille (anti-crash)
     - Modal draggable + copie
     - Menu draggable listant les ScreenGui
+    - Version 1.5
 ]]
 
 local Players = game:GetService("Players")

@@ -2,11 +2,11 @@
 --  GUI Inspector - LocalScript
 --  Placement : StarterPlayerScripts (ou StarterCharacterScripts)
 --  Auteur    : Généré pour Roblox Studio
+--	V - 1.5
 -- ============================================================
 
-local Players       = game:GetService("Players")
+local Players          = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
-local RunService    = game:GetService("RunService")
 
 local LocalPlayer   = Players.LocalPlayer
 local PlayerGui     = LocalPlayer:WaitForChild("PlayerGui")

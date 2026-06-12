@@ -1,369 +1,254 @@
--- Roblox GUI Inspector Script (Version Améliorée)
--- Affiche les propriétés, le contenu des TextLabel/TextBox, les ImageId, et les enfants récursivement.
--- 2
+--[[
+    UI Debugger – Version Ultime
+    - Dump complet : texte, images, propriétés, hiérarchie
+    - Limite profondeur + taille (anti-crash)
+    - Modal draggable + copie
+    - Menu draggable listant les ScreenGui
+]]
 
-local Player = game:GetService("Players").LocalPlayer
-local PlayerGui = Player:WaitForChild("PlayerGui")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
--- Fonction pour créer un bouton déplaçable
-local function createDraggableButton()
-    local button = Instance.new("TextButton")
-    button.Name = "ToggleButton"
-    button.Text = "GUI Inspector++"
-    button.Size = UDim2.new(0, 120, 0, 30)
-    button.Position = UDim2.new(0, 20, 0, 20)
-    button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.Font = Enum.Font.SourceSansBold
-    button.TextSize = 14
-    button.Parent = PlayerGui
-
-    -- Rendre le bouton déplaçable
+---------------------------------------------------------------------
+-- DRAGGABLE
+---------------------------------------------------------------------
+local function makeDraggable(frame, dragHandle)
+    dragHandle = dragHandle or frame
     local dragging = false
-    local dragInput, dragStart, startPos
+    local dragStart, startPos
 
-    local function update(input)
-        local delta = input.Position - dragStart
-        button.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-
-    button.InputBegan:Connect(function(input)
+    dragHandle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             dragStart = input.Position
-            startPos = button.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
+            startPos = frame.Position
         end
     end)
 
-    button.InputChanged:Connect(function(input)
+    dragHandle.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            dragInput = input
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
         end
     end)
 
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input == dragInput then
-            update(input)
+    dragHandle.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
         end
     end)
-
-    return button
 end
 
--- Fonction pour créer le menu principal
-local function createMainMenu()
-    local menu = Instance.new("Frame")
-    menu.Name = "GUIInspectorMenu"
-    menu.Size = UDim2.new(0, 200, 0, 300)
-    menu.Position = UDim2.new(0, 20, 0, 60)
-    menu.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    menu.BorderSizePixel = 0
-    menu.Visible = false
-    menu.Parent = PlayerGui
+---------------------------------------------------------------------
+-- DUMP COMPLET (SAFE)
+---------------------------------------------------------------------
+local function dumpGui(root)
+    local MAX_DEPTH = 6
+    local MAX_LEN = 60000
+    local currentLen = 0
 
-    -- Rendre le menu déplaçable
-    local dragging = false
-    local dragInput, dragStart, startPos
-
-    local function update(input)
-        local delta = input.Position - dragStart
-        menu.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    local function safe(str, add)
+        if currentLen > MAX_LEN then return str end
+        str = str .. add
+        currentLen += #add
+        return str
     end
 
-    local titleBar = Instance.new("Frame")
-    titleBar.Name = "TitleBar"
-    titleBar.Size = UDim2.new(1, 0, 0, 30)
-    titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    titleBar.Parent = menu
+    local function dump(obj, indent, depth)
+        indent = indent or 0
+        depth = depth or 0
+        local prefix = string.rep("  ", indent)
+        local str = ""
 
-    local title = Instance.new("TextLabel")
-    title.Name = "Title"
-    title.Text = "GUI Inspector++"
-    title.Size = UDim2.new(1, 0, 1, 0)
-    title.BackgroundTransparency = 1
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.Font = Enum.Font.SourceSansBold
-    title.TextSize = 16
-    title.Parent = titleBar
+        if depth > MAX_DEPTH then
+            return safe(str, prefix .. "... (profondeur max atteinte)\n")
+        end
 
-    titleBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = menu.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
+        str = safe(str, prefix .. obj.ClassName .. " : " .. obj.Name .. "\n")
+
+        -- Récupérer toutes les propriétés lisibles
+        for _, prop in ipairs(obj:GetAttributes()) do
+            local ok, value = pcall(function()
+                return obj:GetAttribute(prop)
             end)
-        end
-    end)
-
-    titleBar.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            dragInput = input
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input == dragInput then
-            update(input)
-        end
-    end)
-
-    -- Liste des GUIs
-    local guiList = Instance.new("ScrollingFrame")
-    guiList.Name = "GUIList"
-    guiList.Size = UDim2.new(1, -10, 1, -40)
-    guiList.Position = UDim2.new(0, 5, 0, 35)
-    guiList.BackgroundTransparency = 1
-    guiList.ScrollBarThickness = 5
-    guiList.Parent = menu
-
-    local listLayout = Instance.new("UIListLayout")
-    listLayout.Parent = guiList
-
-    -- Fonction pour mettre à jour la liste des GUIs
-    local function updateGUIList()
-        for _, child in ipairs(guiList:GetChildren()) do
-            if child:IsA("TextButton") then
-                child:Destroy()
+            if ok then
+                str = safe(str, prefix .. "  @" .. prop .. " = " .. tostring(value) .. "\n")
             end
         end
 
-        for _, gui in ipairs(PlayerGui:GetChildren()) do
-            if gui:IsA("GuiObject") then
-                local button = Instance.new("TextButton")
-                button.Name = gui.Name
-                button.Text = gui.Name
-                button.Size = UDim2.new(1, -10, 0, 25)
-                button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-                button.TextColor3 = Color3.fromRGB(255, 255, 255)
-                button.Font = Enum.Font.SourceSans
-                button.TextSize = 14
-                button.Parent = guiList
+        -- Propriétés standards
+        local props = {
+            "Text", "FontFace", "TextColor3", "TextSize", "RichText",
+            "Image", "ImageColor3", "ImageRectOffset", "ImageRectSize",
+            "BackgroundColor3", "BackgroundTransparency",
+            "Size", "Position", "Visible", "Active", "AnchorPoint",
+            "BorderSizePixel", "ZIndex", "LayoutOrder"
+        }
 
-                button.MouseButton1Click:Connect(function()
-                    createModal(gui)
+        for _, prop in ipairs(props) do
+            local ok, value = pcall(function()
+                return obj[prop]
+            end)
+            if ok then
+                if typeof(value) == "Color3" then value = tostring(value) end
+                str = safe(str, prefix .. "  " .. prop .. " = " .. tostring(value) .. "\n")
+            end
+        end
+
+        -- Enfants
+        for _, child in ipairs(obj:GetChildren()) do
+            if currentLen > MAX_LEN then
+                str = safe(str, prefix .. "... (taille max atteinte)\n")
+                break
+            end
+            str = str .. dump(child, indent + 1, depth + 1)
+        end
+
+        return str
+    end
+
+    return dump(root)
+end
+
+---------------------------------------------------------------------
+-- UI ROOT
+---------------------------------------------------------------------
+local screen = Instance.new("ScreenGui", playerGui)
+screen.Name = "UIDebugger"
+
+---------------------------------------------------------------------
+-- TOGGLE BUTTON
+---------------------------------------------------------------------
+local toggle = Instance.new("TextButton", screen)
+toggle.Size = UDim2.fromOffset(120, 40)
+toggle.Position = UDim2.fromOffset(50, 200)
+toggle.Text = "UI Debug"
+toggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+toggle.TextColor3 = Color3.new(1, 1, 1)
+
+makeDraggable(toggle)
+
+---------------------------------------------------------------------
+-- MENU
+---------------------------------------------------------------------
+local menu = Instance.new("Frame", screen)
+menu.Size = UDim2.fromOffset(250, 300)
+menu.Position = UDim2.fromOffset(200, 200)
+menu.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+menu.Visible = false
+
+makeDraggable(menu)
+
+local title = Instance.new("TextLabel", menu)
+title.Size = UDim2.new(1, 0, 0, 30)
+title.Text = "Liste des GUI"
+title.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+title.TextColor3 = Color3.new(1, 1, 1)
+
+makeDraggable(menu, title)
+
+local list = Instance.new("ScrollingFrame", menu)
+list.Size = UDim2.new(1, 0, 1, -30)
+list.Position = UDim2.new(0, 0, 0, 30)
+list.CanvasSize = UDim2.new(0, 0, 0, 0)
+list.ScrollBarThickness = 6
+
+toggle.MouseButton1Click:Connect(function()
+    menu.Visible = not menu.Visible
+end)
+
+---------------------------------------------------------------------
+-- REMPLIR LA LISTE
+---------------------------------------------------------------------
+local function refreshList()
+    list:ClearAllChildren()
+    local y = 0
+
+    for _, gui in ipairs(playerGui:GetChildren()) do
+        if gui:IsA("ScreenGui") then
+            local btn = Instance.new("TextButton", list)
+            btn.Size = UDim2.new(1, -10, 0, 30)
+            btn.Position = UDim2.new(0, 5, 0, y)
+            btn.Text = gui.Name
+            btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            btn.TextColor3 = Color3.new(1, 1, 1)
+
+            y += 35
+
+            btn.MouseButton1Click:Connect(function()
+                ---------------------------------------------------------
+                -- MODAL
+                ---------------------------------------------------------
+                local modal = Instance.new("Frame", screen)
+                modal.Size = UDim2.fromOffset(500, 350)
+                modal.Position = UDim2.fromOffset(300, 200)
+                modal.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+
+                makeDraggable(modal)
+
+                local header = Instance.new("TextLabel", modal)
+                header.Size = UDim2.new(1, 0, 0, 30)
+                header.Text = "Inspect : " .. gui.Name
+                header.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+                header.TextColor3 = Color3.new(1, 1, 1)
+
+                makeDraggable(modal, header)
+
+                local close = Instance.new("TextButton", modal)
+                close.Size = UDim2.fromOffset(60, 25)
+                close.Position = UDim2.new(1, -65, 0, 3)
+                close.Text = "Fermer"
+                close.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
+                close.TextColor3 = Color3.new(1, 1, 1)
+
+                close.MouseButton1Click:Connect(function()
+                    modal:Destroy()
                 end)
-            end
-        end
-    end
 
-    -- Bouton pour rafraîchir la liste
-    local refreshButton = Instance.new("TextButton")
-    refreshButton.Name = "RefreshButton"
-    refreshButton.Text = "Rafraîchir"
-    refreshButton.Size = UDim2.new(1, -10, 0, 25)
-    refreshButton.Position = UDim2.new(0, 5, 0, 270)
-    refreshButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-    refreshButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    refreshButton.Font = Enum.Font.SourceSansBold
-    refreshButton.TextSize = 14
-    refreshButton.Parent = menu
+                local content = Instance.new("TextBox", modal)
+                content.Size = UDim2.new(1, -10, 1, -70)
+                content.Position = UDim2.new(0, 5, 0, 35)
+                content.TextXAlignment = Enum.TextXAlignment.Left
+                content.TextYAlignment = Enum.TextYAlignment.Top
+                content.ClearTextOnFocus = false
+                content.MultiLine = true
+                content.TextWrapped = false
+                content.TextEditable = false
+                content.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+                content.TextColor3 = Color3.new(1, 1, 1)
+                content.TextSize = 14
 
-    refreshButton.MouseButton1Click:Connect(updateGUIList)
+                local dump = dumpGui(gui)
+                content.Text = dump
 
-    -- Mettre à jour la liste au démarrage
-    updateGUIList()
+                local copy = Instance.new("TextButton", modal)
+                copy.Size = UDim2.fromOffset(120, 30)
+                copy.Position = UDim2.new(0, 5, 1, -35)
+                copy.Text = "Copier le print"
+                copy.BackgroundColor3 = Color3.fromRGB(40, 120, 40)
+                copy.TextColor3 = Color3.new(1, 1, 1)
 
-    return menu
-end
-
--- Fonction pour obtenir les propriétés détaillées d'une instance
-local function getDetailedProperties(instance, depth)
-    depth = depth or 0
-    local indent = string.rep("  ", depth)
-    local result = {}
-
-    -- Nom et classe
-    table.insert(result, indent .. "--- " .. instance.ClassName .. " (" .. instance.Name .. ") ---")
-
-    -- Propriétés de base
-    local propertiesToCheck = {
-        "Text", "Image", "ImageColor3", "ImageTransparency", "BackgroundColor3", 
-        "TextColor3", "TextSize", "Font", "Size", "Position", "AnchorPoint", 
-        "Visible", "Active", "Draggable", "Selectable", "TextWrapped", 
-        "TextScaled", "RichText", "PlaceholderText", "ContentText"
-    }
-
-    for _, prop in ipairs(propertiesToCheck) do
-        local success, value = pcall(function() return instance[prop] end)
-        if success and value ~= nil then
-            if prop == "Image" and typeof(value) == "string" and value:find("rbxassetid://") then
-                table.insert(result, indent .. "  ImageId: " .. value)
-            elseif prop == "Text" or prop == "PlaceholderText" or prop == "ContentText" then
-                table.insert(result, indent .. "  " .. prop .. ": \"" .. tostring(value) .. "\"")
-            else
-                table.insert(result, indent .. "  " .. prop .. ": " .. tostring(value))
-            end
-        end
-    end
-
-    -- Parent
-    if instance.Parent then
-        table.insert(result, indent .. "  Parent: " .. instance.Parent.Name .. " (" .. instance.Parent.ClassName .. ")")
-    end
-
-    -- Enfants
-    for _, child in ipairs(instance:GetChildren()) do
-        local childProps = getDetailedProperties(child, depth + 1)
-        for _, line in ipairs(childProps) do
-            table.insert(result, line)
-        end
-    end
-
-    return result
-end
-
--- Fonction pour créer une modal
-function createModal(gui)
-    local modal = Instance.new("Frame")
-    modal.Name = "GUIInspectorModal"
-    modal.Size = UDim2.new(0, 500, 0, 600)
-    modal.Position = UDim2.new(0.5, -250, 0.5, -300)
-    modal.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    modal.BorderSizePixel = 0
-    modal.Parent = PlayerGui
-
-    -- Rendre la modal déplaçable
-    local dragging = false
-    local dragInput, dragStart, startPos
-
-    local function update(input)
-        local delta = input.Position - dragStart
-        modal.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-
-    local titleBar = Instance.new("Frame")
-    titleBar.Name = "TitleBar"
-    titleBar.Size = UDim2.new(1, 0, 0, 30)
-    titleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    titleBar.Parent = modal
-
-    local title = Instance.new("TextLabel")
-    title.Name = "Title"
-    title.Text = "Propriétés de: " .. gui.Name
-    title.Size = UDim2.new(1, 0, 1, 0)
-    title.BackgroundTransparency = 1
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.Font = Enum.Font.SourceSansBold
-    title.TextSize = 16
-    title.Parent = titleBar
-
-    local closeButton = Instance.new("TextButton")
-    closeButton.Name = "CloseButton"
-    closeButton.Text = "X"
-    closeButton.Size = UDim2.new(0, 30, 0, 30)
-    closeButton.Position = UDim2.new(1, -30, 0, 0)
-    closeButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    closeButton.Font = Enum.Font.SourceSansBold
-    closeButton.TextSize = 16
-    closeButton.Parent = titleBar
-
-    closeButton.MouseButton1Click:Connect(function()
-        modal:Destroy()
-    end)
-
-    titleBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = modal.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
+                copy.MouseButton1Click:Connect(function()
+                    local ok, err = pcall(function()
+                        if setclipboard then
+                            setclipboard(dump)
+                        else
+                            warn("setclipboard non disponible.")
+                        end
+                    end)
+                    if not ok then warn("Erreur setclipboard :", err) end
+                end)
             end)
         end
-    end)
+    end
 
-    titleBar.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            dragInput = input
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input == dragInput then
-            update(input)
-        end
-    end)
-
-    -- Zone de contenu
-    local contentFrame = Instance.new("ScrollingFrame")
-    contentFrame.Name = "ContentFrame"
-    contentFrame.Size = UDim2.new(1, -10, 1, -70)
-    contentFrame.Position = UDim2.new(0, 5, 0, 40)
-    contentFrame.BackgroundTransparency = 1
-    contentFrame.ScrollBarThickness = 5
-    contentFrame.Parent = modal
-
-    local contentLayout = Instance.new("UIListLayout")
-    contentLayout.Parent = contentFrame
-
-    -- Obtenir les propriétés détaillées
-    local propertiesLines = getDetailedProperties(gui)
-    local propertiesText = table.concat(propertiesLines, "\n")
-
-    -- Afficher les propriétés dans la modal
-    local textLabel = Instance.new("TextLabel")
-    textLabel.Name = "PropertiesText"
-    textLabel.Text = propertiesText
-    textLabel.Size = UDim2.new(1, 0, 0, #propertiesText * 8)
-    textLabel.BackgroundTransparency = 1
-    textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    textLabel.Font = Enum.Font.SourceSans
-    textLabel.TextSize = 12
-    textLabel.TextXAlignment = Enum.TextXAlignment.Left
-    textLabel.TextYAlignment = Enum.TextYAlignment.Top
-    textLabel.TextWrapped = true
-    textLabel.Parent = contentFrame
-
-    -- Bouton pour copier le texte
-    local copyButton = Instance.new("TextButton")
-    copyButton.Name = "CopyButton"
-    copyButton.Text = "Copier"
-    copyButton.Size = UDim2.new(0, 100, 0, 30)
-    copyButton.Position = UDim2.new(1, -110, 0, 0)
-    copyButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-    copyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    copyButton.Font = Enum.Font.SourceSansBold
-    copyButton.TextSize = 14
-    copyButton.Parent = titleBar
-
-    copyButton.MouseButton1Click:Connect(function()
-        print("Contenu copié :")
-        print(propertiesText)
-        -- Utiliser setclipboard si disponible
-        if setclipboard then
-            setclipboard(propertiesText)
-        end
-    end)
+    list.CanvasSize = UDim2.new(0, 0, 0, y)
 end
 
--- Créer le bouton toggle et le menu
-local toggleButton = createDraggableButton()
-local mainMenu = createMainMenu()
-
--- Toggle du menu
-local isMenuVisible = false
-toggleButton.MouseButton1Click:Connect(function()
-    isMenuVisible = not isMenuVisible
-    mainMenu.Visible = isMenuVisible
-end)
-
--- Mettre à jour la liste des GUIs périodiquement
-RunService.Heartbeat:Connect(function()
-    if mainMenu.Visible then
-        -- Optionnel : Rafraîchir automatiquement la liste
-    end
-end)
+refreshList()

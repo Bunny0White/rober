@@ -1,18 +1,19 @@
 --[[
-    UI Debugger – by Ylan & Copilot
-    Fonctionnalités :
+    UI Debugger – Version Stable
     - Toggle draggable
-    - Menu draggable listant les ScreenGui du joueur
-    - Modal draggable affichant les infos d’un GUI
-    - Bouton copier le print
+    - Menu draggable listant les ScreenGui
+    - Modal draggable + fermable
+    - Dump sécurisé (limite profondeur + taille)
+    - Copie du texte protégée
 ]]
 
 local Players = game:GetService("Players")
-local StarterGui = game:GetService("StarterGui")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Fonction utilitaire : rendre un Frame draggable
+---------------------------------------------------------------------
+-- DRAGGABLE
+---------------------------------------------------------------------
 local function makeDraggable(frame, dragHandle)
     dragHandle = dragHandle or frame
     local dragging = false
@@ -45,25 +46,47 @@ local function makeDraggable(frame, dragHandle)
     end)
 end
 
--- Fonction utilitaire : générer un print structuré
+---------------------------------------------------------------------
+-- DUMP SÉCURISÉ
+---------------------------------------------------------------------
 local function dumpGui(gui)
-    local function dump(obj, indent)
+    local MAX_DEPTH = 5
+    local MAX_LEN = 20000
+    local currentLen = 0
+
+    local function safeAppend(str, add)
+        if currentLen > MAX_LEN then return str end
+        str = str .. add
+        currentLen += #add
+        return str
+    end
+
+    local function dump(obj, indent, depth)
         indent = indent or 0
+        depth = depth or 0
         local prefix = string.rep("  ", indent)
-        local str = prefix .. obj.ClassName .. " : " .. obj.Name .. "\n"
+        local str = ""
+
+        if depth > MAX_DEPTH then
+            return safeAppend(str, prefix .. "... (profondeur max atteinte)\n")
+        end
+
+        str = safeAppend(str, prefix .. obj.ClassName .. " : " .. obj.Name .. "\n")
 
         for _, prop in ipairs({"Visible", "Active", "Size", "Position", "BackgroundColor3"}) do
             pcall(function()
                 local v = obj[prop]
-                if typeof(v) == "Color3" then
-                    v = tostring(v)
-                end
-                str = str .. prefix .. "  " .. prop .. " = " .. tostring(v) .. "\n"
+                if typeof(v) == "Color3" then v = tostring(v) end
+                str = safeAppend(str, prefix .. "  " .. prop .. " = " .. tostring(v) .. "\n")
             end)
         end
 
         for _, child in ipairs(obj:GetChildren()) do
-            str = str .. dump(child, indent + 1)
+            if currentLen > MAX_LEN then
+                str = safeAppend(str, prefix .. "... (taille max atteinte)\n")
+                break
+            end
+            str = str .. dump(child, indent + 1, depth + 1)
         end
 
         return str
@@ -72,11 +95,15 @@ local function dumpGui(gui)
     return dump(gui)
 end
 
+---------------------------------------------------------------------
 -- UI ROOT
+---------------------------------------------------------------------
 local screen = Instance.new("ScreenGui", playerGui)
 screen.Name = "UIDebugger"
 
--- Toggle Button
+---------------------------------------------------------------------
+-- TOGGLE BUTTON
+---------------------------------------------------------------------
 local toggle = Instance.new("TextButton", screen)
 toggle.Size = UDim2.fromOffset(120, 40)
 toggle.Position = UDim2.fromOffset(50, 200)
@@ -86,7 +113,9 @@ toggle.TextColor3 = Color3.new(1, 1, 1)
 
 makeDraggable(toggle)
 
--- Menu
+---------------------------------------------------------------------
+-- MENU
+---------------------------------------------------------------------
 local menu = Instance.new("Frame", screen)
 menu.Size = UDim2.fromOffset(250, 300)
 menu.Position = UDim2.fromOffset(200, 200)
@@ -109,12 +138,13 @@ list.Position = UDim2.new(0, 0, 0, 30)
 list.CanvasSize = UDim2.new(0, 0, 0, 0)
 list.ScrollBarThickness = 6
 
--- Toggle menu
 toggle.MouseButton1Click:Connect(function()
     menu.Visible = not menu.Visible
 end)
 
--- Remplir la liste des GUI
+---------------------------------------------------------------------
+-- REMPLIR LA LISTE
+---------------------------------------------------------------------
 local function refreshList()
     list:ClearAllChildren()
     local y = 0
@@ -131,7 +161,9 @@ local function refreshList()
             y += 35
 
             btn.MouseButton1Click:Connect(function()
-                -- Ouvrir une modal
+                ---------------------------------------------------------
+                -- MODAL
+                ---------------------------------------------------------
                 local modal = Instance.new("Frame", screen)
                 modal.Size = UDim2.fromOffset(400, 300)
                 modal.Position = UDim2.fromOffset(300, 200)
@@ -173,7 +205,6 @@ local function refreshList()
 
                 local dump = dumpGui(gui)
                 content.Text = dump
-                print(dump)
 
                 local copy = Instance.new("TextButton", modal)
                 copy.Size = UDim2.fromOffset(120, 30)
@@ -183,7 +214,14 @@ local function refreshList()
                 copy.TextColor3 = Color3.new(1, 1, 1)
 
                 copy.MouseButton1Click:Connect(function()
-                    setclipboard(dump)
+                    local ok, err = pcall(function()
+                        if setclipboard then
+                            setclipboard(dump)
+                        else
+                            warn("setclipboard non disponible.")
+                        end
+                    end)
+                    if not ok then warn("Erreur setclipboard :", err) end
                 end)
             end)
         end

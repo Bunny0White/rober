@@ -1,6 +1,6 @@
--- Roblox GUI Inspector Script
--- Ce script crée un menu déplaçable avec un bouton toggle, une liste des GUIs du joueur,
--- et une modal pour afficher les propriétés des éléments sélectionnés.
+-- Roblox GUI Inspector Script (Version Améliorée)
+-- Affiche les propriétés, le contenu des TextLabel/TextBox, les ImageId, et les enfants récursivement.
+-- 2
 
 local Player = game:GetService("Players").LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
@@ -11,7 +11,7 @@ local RunService = game:GetService("RunService")
 local function createDraggableButton()
     local button = Instance.new("TextButton")
     button.Name = "ToggleButton"
-    button.Text = "GUI Inspector"
+    button.Text = "GUI Inspector++"
     button.Size = UDim2.new(0, 120, 0, 30)
     button.Position = UDim2.new(0, 20, 0, 20)
     button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
@@ -85,7 +85,7 @@ local function createMainMenu()
 
     local title = Instance.new("TextLabel")
     title.Name = "Title"
-    title.Text = "GUI Inspector"
+    title.Text = "GUI Inspector++"
     title.Size = UDim2.new(1, 0, 1, 0)
     title.BackgroundTransparency = 1
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -162,7 +162,7 @@ local function createMainMenu()
     refreshButton.Name = "RefreshButton"
     refreshButton.Text = "Rafraîchir"
     refreshButton.Size = UDim2.new(1, -10, 0, 25)
-    refreshButton.Position = UDim2.new(0, 5, 0, 300)
+    refreshButton.Position = UDim2.new(0, 5, 0, 270)
     refreshButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
     refreshButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     refreshButton.Font = Enum.Font.SourceSansBold
@@ -177,12 +177,58 @@ local function createMainMenu()
     return menu
 end
 
+-- Fonction pour obtenir les propriétés détaillées d'une instance
+local function getDetailedProperties(instance, depth)
+    depth = depth or 0
+    local indent = string.rep("  ", depth)
+    local result = {}
+
+    -- Nom et classe
+    table.insert(result, indent .. "--- " .. instance.ClassName .. " (" .. instance.Name .. ") ---")
+
+    -- Propriétés de base
+    local propertiesToCheck = {
+        "Text", "Image", "ImageColor3", "ImageTransparency", "BackgroundColor3", 
+        "TextColor3", "TextSize", "Font", "Size", "Position", "AnchorPoint", 
+        "Visible", "Active", "Draggable", "Selectable", "TextWrapped", 
+        "TextScaled", "RichText", "PlaceholderText", "ContentText"
+    }
+
+    for _, prop in ipairs(propertiesToCheck) do
+        local success, value = pcall(function() return instance[prop] end)
+        if success and value ~= nil then
+            if prop == "Image" and typeof(value) == "string" and value:find("rbxassetid://") then
+                table.insert(result, indent .. "  ImageId: " .. value)
+            elseif prop == "Text" or prop == "PlaceholderText" or prop == "ContentText" then
+                table.insert(result, indent .. "  " .. prop .. ": \"" .. tostring(value) .. "\"")
+            else
+                table.insert(result, indent .. "  " .. prop .. ": " .. tostring(value))
+            end
+        end
+    end
+
+    -- Parent
+    if instance.Parent then
+        table.insert(result, indent .. "  Parent: " .. instance.Parent.Name .. " (" .. instance.Parent.ClassName .. ")")
+    end
+
+    -- Enfants
+    for _, child in ipairs(instance:GetChildren()) do
+        local childProps = getDetailedProperties(child, depth + 1)
+        for _, line in ipairs(childProps) do
+            table.insert(result, line)
+        end
+    end
+
+    return result
+end
+
 -- Fonction pour créer une modal
 function createModal(gui)
     local modal = Instance.new("Frame")
     modal.Name = "GUIInspectorModal"
-    modal.Size = UDim2.new(0, 400, 0, 500)
-    modal.Position = UDim2.new(0.5, -200, 0.5, -250)
+    modal.Size = UDim2.new(0, 500, 0, 600)
+    modal.Position = UDim2.new(0.5, -250, 0.5, -300)
     modal.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     modal.BorderSizePixel = 0
     modal.Parent = PlayerGui
@@ -264,36 +310,15 @@ function createModal(gui)
     local contentLayout = Instance.new("UIListLayout")
     contentLayout.Parent = contentFrame
 
-    -- Fonction pour afficher les propriétés
-    local function printProperties(instance, depth)
-        depth = depth or 0
-        local indent = string.rep("  ", depth)
-        local text = indent .. "--- " .. instance.ClassName .. " (" .. instance.Name .. ") ---\n"
-
-        -- Ajouter les propriétés de l'instance
-        for property, value in pairs(instance:GetProperties()) do
-            text = text .. indent .. "  " .. property .. ": " .. tostring(value) .. "\n"
-        end
-
-        -- Ajouter les propriétés des parents
-        if instance.Parent then
-            text = text .. indent .. "Parent: " .. instance.Parent.Name .. " (" .. instance.Parent.ClassName .. ")\n"
-        end
-
-        -- Ajouter les enfants
-        for _, child in ipairs(instance:GetChildren()) do
-            text = text .. printProperties(child, depth + 1)
-        end
-
-        return text
-    end
+    -- Obtenir les propriétés détaillées
+    local propertiesLines = getDetailedProperties(gui)
+    local propertiesText = table.concat(propertiesLines, "\n")
 
     -- Afficher les propriétés dans la modal
-    local propertiesText = printProperties(gui)
     local textLabel = Instance.new("TextLabel")
     textLabel.Name = "PropertiesText"
     textLabel.Text = propertiesText
-    textLabel.Size = UDim2.new(1, 0, 0, #propertiesText * 10)
+    textLabel.Size = UDim2.new(1, 0, 0, #propertiesText * 8)
     textLabel.BackgroundTransparency = 1
     textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     textLabel.Font = Enum.Font.SourceSans
@@ -316,10 +341,9 @@ function createModal(gui)
     copyButton.Parent = titleBar
 
     copyButton.MouseButton1Click:Connect(function()
-        -- Copier le texte dans le presse-papiers (simulé)
-        print("Contenu copié:")
+        print("Contenu copié :")
         print(propertiesText)
-        -- Dans Roblox, vous pouvez utiliser `setclipboard` si disponible
+        -- Utiliser setclipboard si disponible
         if setclipboard then
             setclipboard(propertiesText)
         end
@@ -340,6 +364,6 @@ end)
 -- Mettre à jour la liste des GUIs périodiquement
 RunService.Heartbeat:Connect(function()
     if mainMenu.Visible then
-        -- Optionnel: Rafraîchir automatiquement la liste
+        -- Optionnel : Rafraîchir automatiquement la liste
     end
 end)

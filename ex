@@ -50,43 +50,133 @@ end
 -- DUMP SÉCURISÉ
 ---------------------------------------------------------------------
 local function dumpGui(gui)
-    local MAX_DEPTH = 5
-    local MAX_LEN = 20000
+    local MAX_DEPTH = 10
+    local MAX_LEN = 100000
     local currentLen = 0
 
     local function safeAppend(str, add)
-        if currentLen > MAX_LEN then return str end
-        str = str .. add
+        if currentLen >= MAX_LEN then
+            return str
+        end
+
         currentLen += #add
+        return str .. add
+    end
+
+    local function addProperty(str, prefix, obj, prop)
+        pcall(function()
+            local value = obj[prop]
+
+            if value ~= nil then
+                if typeof(value) == "Color3" then
+                    value = string.format(
+                        "RGB(%d,%d,%d)",
+                        math.floor(value.R * 255),
+                        math.floor(value.G * 255),
+                        math.floor(value.B * 255)
+                    )
+                end
+
+                str = safeAppend(
+                    str,
+                    prefix .. "  " .. prop .. " = " .. tostring(value) .. "\n"
+                )
+            end
+        end)
+
         return str
     end
 
     local function dump(obj, indent, depth)
         indent = indent or 0
         depth = depth or 0
-        local prefix = string.rep("  ", indent)
+
+        local prefix = string.rep("    ", indent)
         local str = ""
 
         if depth > MAX_DEPTH then
-            return safeAppend(str, prefix .. "... (profondeur max atteinte)\n")
+            return safeAppend(
+                str,
+                prefix .. "... profondeur maximale atteinte\n"
+            )
         end
 
-        str = safeAppend(str, prefix .. obj.ClassName .. " : " .. obj.Name .. "\n")
+        ---------------------------------------------------------
+        -- ENTÊTE
+        ---------------------------------------------------------
+        str = safeAppend(
+            str,
+            prefix .. "[" .. obj.ClassName .. "] " .. obj.Name .. "\n"
+        )
 
-        for _, prop in ipairs({"Visible", "Active", "Size", "Position", "BackgroundColor3"}) do
-            pcall(function()
-                local v = obj[prop]
-                if typeof(v) == "Color3" then v = tostring(v) end
-                str = safeAppend(str, prefix .. "  " .. prop .. " = " .. tostring(v) .. "\n")
-            end)
+        pcall(function()
+            str = safeAppend(
+                str,
+                prefix .. "  FullName = " .. obj:GetFullName() .. "\n"
+            )
+        end)
+
+        ---------------------------------------------------------
+        -- PROPRIÉTÉS COMMUNES
+        ---------------------------------------------------------
+        local properties = {
+            "Visible",
+            "Active",
+            "Enabled",
+
+            "Size",
+            "Position",
+            "AnchorPoint",
+
+            "BackgroundTransparency",
+            "BackgroundColor3",
+
+            "Text",
+            "PlaceholderText",
+            "TextColor3",
+            "TextSize",
+            "TextTransparency",
+            "Font",
+            "RichText",
+
+            "Image",
+            "HoverImage",
+            "PressedImage",
+            "ImageColor3",
+            "ImageTransparency",
+            "ScaleType",
+
+            "ZIndex",
+            "LayoutOrder",
+            "Rotation",
+
+            "AutoButtonColor",
+            "Selectable",
+
+            "Value" -- utile pour certains objets
+        }
+
+        for _, prop in ipairs(properties) do
+            str = addProperty(str, prefix, obj, prop)
         end
 
+        ---------------------------------------------------------
+        -- ENFANTS
+        ---------------------------------------------------------
         for _, child in ipairs(obj:GetChildren()) do
-            if currentLen > MAX_LEN then
-                str = safeAppend(str, prefix .. "... (taille max atteinte)\n")
+            if currentLen >= MAX_LEN then
+                str = safeAppend(
+                    str,
+                    prefix .. "... taille maximale atteinte\n"
+                )
                 break
             end
-            str = str .. dump(child, indent + 1, depth + 1)
+
+            str = safeAppend(str, "\n")
+            str = safeAppend(
+                str,
+                dump(child, indent + 1, depth + 1)
+            )
         end
 
         return str

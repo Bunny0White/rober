@@ -1,10 +1,11 @@
 --[[
-    UI Debugger – Version Sans Limites
+    UI Debugger – Version Sans Limites + ALL GUI
     - Dump complet : texte, images, propriétés, hiérarchie
     - AUCUNE limite de profondeur
     - AUCUNE limite de taille
     - Modal draggable + copie
-    - Menu draggable listant TOUT PlayerGui (pas seulement ScreenGui)
+    - Menu draggable listant TOUT PlayerGui
+    - Bouton "All GUI" pour tout dump d’un coup
 ]]
 
 local Players = game:GetService("Players")
@@ -137,13 +138,102 @@ title.TextColor3 = Color3.new(1, 1, 1)
 makeDraggable(menu, title)
 
 local list = Instance.new("ScrollingFrame", menu)
-list.Size = UDim2.new(1, 0, 1, -30)
+list.Size = UDim2.new(1, 0, 1, -70)
 list.Position = UDim2.new(0, 0, 0, 30)
 list.CanvasSize = UDim2.new(0, 0, 0, 0)
 list.ScrollBarThickness = 6
 
+---------------------------------------------------------------------
+-- BOUTON ALL GUI
+---------------------------------------------------------------------
+local allBtn = Instance.new("TextButton", menu)
+allBtn.Size = UDim2.new(1, -10, 0, 30)
+allBtn.Position = UDim2.new(0, 5, 1, -35)
+allBtn.Text = "ALL GUI"
+allBtn.BackgroundColor3 = Color3.fromRGB(100, 40, 40)
+allBtn.TextColor3 = Color3.new(1, 1, 1)
+
+---------------------------------------------------------------------
+-- OUVERTURE / FERMETURE MENU
+---------------------------------------------------------------------
 toggle.MouseButton1Click:Connect(function()
     menu.Visible = not menu.Visible
+end)
+
+---------------------------------------------------------------------
+-- MODAL CREATOR
+---------------------------------------------------------------------
+local function openModal(titleText, dumpText)
+    local modal = Instance.new("Frame", screen)
+    modal.Size = UDim2.fromOffset(600, 400)
+    modal.Position = UDim2.fromOffset(300, 200)
+    modal.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+
+    makeDraggable(modal)
+
+    local header = Instance.new("TextLabel", modal)
+    header.Size = UDim2.new(1, 0, 0, 30)
+    header.Text = titleText
+    header.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    header.TextColor3 = Color3.new(1, 1, 1)
+
+    makeDraggable(modal, header)
+
+    local close = Instance.new("TextButton", modal)
+    close.Size = UDim2.fromOffset(60, 25)
+    close.Position = UDim2.new(1, -65, 0, 3)
+    close.Text = "Fermer"
+    close.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
+    close.TextColor3 = Color3.new(1, 1, 1)
+
+    close.MouseButton1Click:Connect(function()
+        modal:Destroy()
+    end)
+
+    local content = Instance.new("TextBox", modal)
+    content.Size = UDim2.new(1, -10, 1, -70)
+    content.Position = UDim2.new(0, 5, 0, 35)
+    content.TextXAlignment = Enum.TextXAlignment.Left
+    content.TextYAlignment = Enum.TextYAlignment.Top
+    content.ClearTextOnFocus = false
+    content.MultiLine = true
+    content.TextWrapped = false
+    content.TextEditable = false
+    content.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    content.TextColor3 = Color3.new(1, 1, 1)
+    content.TextSize = 14
+    content.Text = dumpText
+
+    local copy = Instance.new("TextButton", modal)
+    copy.Size = UDim2.fromOffset(120, 30)
+    copy.Position = UDim2.new(0, 5, 1, -35)
+    copy.Text = "Copier"
+    copy.BackgroundColor3 = Color3.fromRGB(40, 120, 40)
+    copy.TextColor3 = Color3.new(1, 1, 1)
+
+    copy.MouseButton1Click:Connect(function()
+        local ok, err = pcall(function()
+            if setclipboard then
+                setclipboard(dumpText)
+            else
+                warn("setclipboard non disponible.")
+            end
+        end)
+        if not ok then warn("Erreur setclipboard :", err) end
+    end)
+end
+
+---------------------------------------------------------------------
+-- BOUTON ALL GUI → DUMP COMPLET
+---------------------------------------------------------------------
+allBtn.MouseButton1Click:Connect(function()
+    local fullDump = ""
+
+    for _, obj in ipairs(playerGui:GetChildren()) do
+        fullDump = fullDump .. dumpGui(obj) .. "\n"
+    end
+
+    openModal("ALL GUI (PlayerGui complet)", fullDump)
 end)
 
 ---------------------------------------------------------------------
@@ -164,68 +254,7 @@ local function refreshList()
         y += 35
 
         btn.MouseButton1Click:Connect(function()
-            ---------------------------------------------------------
-            -- MODAL
-            ---------------------------------------------------------
-            local modal = Instance.new("Frame", screen)
-            modal.Size = UDim2.fromOffset(600, 400)
-            modal.Position = UDim2.fromOffset(300, 200)
-            modal.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-
-            makeDraggable(modal)
-
-            local header = Instance.new("TextLabel", modal)
-            header.Size = UDim2.new(1, 0, 0, 30)
-            header.Text = "Inspect : " .. obj.Name
-            header.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-            header.TextColor3 = Color3.new(1, 1, 1)
-
-            makeDraggable(modal, header)
-
-            local close = Instance.new("TextButton", modal)
-            close.Size = UDim2.fromOffset(60, 25)
-            close.Position = UDim2.new(1, -65, 0, 3)
-            close.Text = "Fermer"
-            close.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
-            close.TextColor3 = Color3.new(1, 1, 1)
-
-            close.MouseButton1Click:Connect(function()
-                modal:Destroy()
-            end)
-
-            local content = Instance.new("TextBox", modal)
-            content.Size = UDim2.new(1, -10, 1, -70)
-            content.Position = UDim2.new(0, 5, 0, 35)
-            content.TextXAlignment = Enum.TextXAlignment.Left
-            content.TextYAlignment = Enum.TextYAlignment.Top
-            content.ClearTextOnFocus = false
-            content.MultiLine = true
-            content.TextWrapped = false
-            content.TextEditable = false
-            content.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-            content.TextColor3 = Color3.new(1, 1, 1)
-            content.TextSize = 14
-
-            local dump = dumpGui(obj)
-            content.Text = dump
-
-            local copy = Instance.new("TextButton", modal)
-            copy.Size = UDim2.fromOffset(120, 30)
-            copy.Position = UDim2.new(0, 5, 1, -35)
-            copy.Text = "Copier"
-            copy.BackgroundColor3 = Color3.fromRGB(40, 120, 40)
-            copy.TextColor3 = Color3.new(1, 1, 1)
-
-            copy.MouseButton1Click:Connect(function()
-                local ok, err = pcall(function()
-                    if setclipboard then
-                        setclipboard(dump)
-                    else
-                        warn("setclipboard non disponible.")
-                    end
-                end)
-                if not ok then warn("Erreur setclipboard :", err) end
-            end)
+            openModal("Inspect : " .. obj.Name, dumpGui(obj))
         end)
     end
 

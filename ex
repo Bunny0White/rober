@@ -1,5 +1,5 @@
 --[[
-    UI Debugger – Version Sans Limites + ALL GUI
+    UI Debugger – Version Sans Limites + ALL GUI 2
     - Dump complet : texte, images, propriétés, hiérarchie
     - AUCUNE limite de profondeur
     - AUCUNE limite de taille
@@ -165,7 +165,7 @@ end)
 ---------------------------------------------------------------------
 local function openModal(titleText, dumpText)
     local modal = Instance.new("Frame", screen)
-    modal.Size = UDim2.fromOffset(600, 400)
+    modal.Size = UDim2.fromOffset(700, 500)
     modal.Position = UDim2.fromOffset(300, 200)
     modal.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 
@@ -190,20 +190,33 @@ local function openModal(titleText, dumpText)
         modal:Destroy()
     end)
 
-    local content = Instance.new("TextBox", modal)
-    content.Size = UDim2.new(1, -10, 1, -70)
-    content.Position = UDim2.new(0, 5, 0, 35)
+    -- SCROLLING FRAME POUR LE TEXTE
+    local scroll = Instance.new("ScrollingFrame", modal)
+    scroll.Size = UDim2.new(1, -10, 1, -70)
+    scroll.Position = UDim2.new(0, 5, 0, 35)
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scroll.ScrollBarThickness = 8
+    scroll.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+
+    -- TEXTLABEL QUI S’ÉTEND AUTOMATIQUEMENT
+    local content = Instance.new("TextLabel", scroll)
+    content.Size = UDim2.new(1, -10, 0, 0)
+    content.Position = UDim2.new(0, 5, 0, 5)
     content.TextXAlignment = Enum.TextXAlignment.Left
     content.TextYAlignment = Enum.TextYAlignment.Top
-    content.ClearTextOnFocus = false
-    content.MultiLine = true
-    content.TextWrapped = false
-    content.TextEditable = false
-    content.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    content.BackgroundTransparency = 1
     content.TextColor3 = Color3.new(1, 1, 1)
     content.TextSize = 14
+    content.Font = Enum.Font.Code
+    content.TextWrapped = false
     content.Text = dumpText
+    content.AutomaticSize = Enum.AutomaticSize.Y
 
+    -- Met à jour la taille du scroll
+    task.wait()
+    scroll.CanvasSize = UDim2.new(0, 0, 0, content.AbsoluteSize.Y + 20)
+
+    -- BOUTON COPIER
     local copy = Instance.new("TextButton", modal)
     copy.Size = UDim2.fromOffset(120, 30)
     copy.Position = UDim2.new(0, 5, 1, -35)
